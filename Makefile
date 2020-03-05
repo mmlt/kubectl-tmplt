@@ -1,6 +1,4 @@
 
-export GO111MODULE=on
-
 .PHONY: test
 test:
 	go test ./pkg/... ./cmd/... -coverprofile cover.out
@@ -19,10 +17,9 @@ vet:
 
 .PHONY: kubernetes-deps
 kubernetes-deps:
-	go get k8s.io/client-go@v11.0.0
-	go get k8s.io/api@kubernetes-1.14.0
-	go get k8s.io/apimachinery@kubernetes-1.14.0
-	go get k8s.io/cli-runtime@kubernetes-1.14.0
+	go get k8s.io/client-go@v0.17.3
+	go get k8s.io/apimachinery@v0.17.3
+	go get k8s.io/cli-runtime@v0.17.3
 
 .PHONY: setup
 setup:
