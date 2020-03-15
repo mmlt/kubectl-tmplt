@@ -41,7 +41,7 @@ jobs:
         prerelease: false
 
     - name: Upload linux-amd64
-      id: upload_release_asset
+      id: upload_release_asset_linux
       uses: actions/upload-release-asset@v1.0.1
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -52,7 +52,7 @@ jobs:
         asset_content_type: application/octet-stream
 
     - name: Upload darwin-amd64
-      id: upload_release_asset
+      id: upload_release_asset_darwin
       uses: actions/upload-release-asset@v1.0.1
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -63,7 +63,7 @@ jobs:
         asset_content_type: application/octet-stream
 
     - name: Upload windows-amd64
-      id: upload_release_asset
+      id: upload_release_asset_windows
       uses: actions/upload-release-asset@v1.0.1
       env:
         GITHUB_TOKEN: ${{ github.token }}
