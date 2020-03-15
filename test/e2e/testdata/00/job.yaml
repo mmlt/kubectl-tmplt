@@ -1,0 +1,8 @@
+steps:
+  - tmplt: "template.yaml"
+    values:
+      name: "test"
+  - wait: --for condition=Ready pod -l app=example
+
+defaults:
+  namespace: "default"

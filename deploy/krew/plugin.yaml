@@ -35,15 +35,15 @@ spec:
     - from: "/kubectl-tmplt.exe"
       to: "."
     bin: "kubectl-tmplt.exe"
-  shortDescription: A new plugin
+  shortDescription: A plugin to apply templated resources.
   homepage: https://github.com/mmlt/kubectl-tmplt
   caveats: |
     Usage:
       $ kubectl kubectl-tmplt
 
     For additional options:
-      $ kubectl kubectl-tmplt --help
-      or https://github.com/mmlt/kubectl-tmplt/blob/v0.1.0/doc/USAGE.md
+      $ kubectl tmplt --help
+      or https://github.com/mmlt/kubectl-tmplt/blob/v0.1.0/README.md
 
   description: |
-    This is a new plugin
+    This a plugin to apply templated resources.

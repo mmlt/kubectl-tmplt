@@ -1,0 +1,24 @@
+# Group-role binding create a, namespace scoped, mapping from an AD group to a cluster role. 
+#
+# Parameters:
+#   name:       # name of the binding, typically the AD group name.
+#   namespace:  # the namespace to apply the binding to
+#   roleRef:    # the ClusterRole to bind (admin, edit, view)
+#   groupName:  # groupName is the AD group ID or a predefined group like system:authenticated (all authenticated users)
+#
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    mmlt.nl/gitops: {{ .Values.gitops }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.roleRef }}
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: {{ .Values.groupName }}

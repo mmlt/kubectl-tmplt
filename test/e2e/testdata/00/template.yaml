@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ .Values.name }}"
+  namespace: "{{ .Values.namespace }}"
+  labels:
+    app: example
+spec:
+  containers:
+    - args: [sleep, "3600"]
+      image: ubuntu
+      name: ubuntu

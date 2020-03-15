@@ -1,0 +1,52 @@
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+    - 'v*' # Push events that match tag pattern v*, i.e. v1.0, v20.15.10
+
+name: Release tool-tmplt from master
+
+jobs:
+  build:
+    name: Build, release and upload assets
+    runs-on: ubuntu-latest
+    steps:
+    
+    - name: Set up GO
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.13
+
+    - name: Checkout code
+      uses: actions/checkout@master
+      
+    - name: Get the version from tag
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+      
+    - name: Build
+      run: make all
+      env:
+        VERSION: ${{ steps.get_version.outputs.VERSION }}
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1.0.0
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      id: upload-release-asset 
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./bin/kubectl-tmplt-${{ steps.get_version.outputs.VERSION }}-linux-amd64
+        asset_name: kubectl-tmplt-${{ steps.get_version.outputs.VERSION }}-linux-amd64
+        asset_content_type: application/octet-stream

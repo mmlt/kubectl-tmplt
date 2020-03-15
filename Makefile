@@ -1,26 +1,42 @@
+.PHONY: all install-tools generate test bin check
 
-.PHONY: test
-test:
-	go test ./pkg/... ./cmd/... -coverprofile cover.out
+VERSION?=v0.1.0
 
-.PHONY: bin
-bin: fmt vet
-	go build -o bin/kubectl-tmplt github.com/mmlt/kubectl-tmplt/cmd/plugin
+# CI/CD target.
+all: install-tools generate bin
 
-.PHONY: fmt
-fmt:
+# Install (code generation) tools.
+install-tools:
+	grep _ pkg/internal/tools/tools.go | cut -d'"' -f2 | xargs go install
+
+# Generate code (expects $GOBIN to be in PATH)
+generate:
+	go generate ./pkg/...
+
+# Run tests.
+test: check
+	go test ./pkg/... ./cmd/... -coverprofile test.cover
+
+teste2e: check
+	go test ./test/e2e/... -coverprofile e2e.cover
+
+# Create binaries.
+bin: check
+	GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=$(VERSION)" -o bin/kubectl-tmplt-$(VERSION)-linux-amd64 github.com/mmlt/kubectl-tmplt/cmd/plugin
+	GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=$(VERSION)" -o bin/kubectl-tmplt-$(VERSION)-windows-amd64.exe github.com/mmlt/kubectl-tmplt/cmd/plugin
+	GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=$(VERSION)" -o bin/kubectl-tmplt-$(VERSION)-darwin-amd64 github.com/mmlt/kubectl-tmplt/cmd/plugin
+
+# Check code for issues.
+check:
 	go fmt ./pkg/... ./cmd/...
-
-.PHONY: vet
-vet:
 	go vet ./pkg/... ./cmd/...
 
-.PHONY: kubernetes-deps
-kubernetes-deps:
-	go get k8s.io/client-go@v0.17.3
-	go get k8s.io/apimachinery@v0.17.3
-	go get k8s.io/cli-runtime@v0.17.3
+# Check code for style issues.
+stylecheck:
+	golint ./pkg/... ./cmd/...
 
-.PHONY: setup
-setup:
-	make -C setup
+# Install binary in PATH.
+install-linux:
+	sudo cp bin/kubectl-tmplt-$(VERSION)-linux-amd64 /usr/local/bin/
+	sudo ln -sfr /usr/local/bin/kubectl-tmplt-$(VERSION)-linux-amd64 /usr/local/bin/kubectl-tmplt
+

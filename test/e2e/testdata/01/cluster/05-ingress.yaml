@@ -1,0 +1,38 @@
+# This file lists the resources that make a plain Kubernetes cluster a Binck cluster.
+# The resources are applied after cluster creation.
+
+steps:
+# ingress-nginx 
+- tmplt: ../tpl/namespace.yaml
+  values:
+    name: ingress-nginx
+    opaExcluded: true 
+ 
+- tmplt: ../tpl/ingress-nginx-shared.yaml
+
+# Ingress "in"
+- tmplt: ../tpl/ingress-nginx.yaml
+  values:
+    namespace: ingress-nginx
+    ingress:
+      class: in 
+      replicaCount: 1
+    podSecurityPolicy: true
+    
+# Ingress "ex"
+- tmplt: ../tpl/ingress-nginx.yaml
+  values:
+    namespace: ingress-nginx
+    ingress:
+      class: ex 
+      replicaCount: 1
+    podSecurityPolicy: true
+
+- wait: --namespace ingress-nginx po --for condition=Ready -l app.kubernetes.io/name=ingress-nginx-in
+
+
+# default values for all template expansions (also see values.yaml)
+defaults:
+  gitops: k8s-clusters-addons.ingress
+  k8sOwner: example
+  k8sCostcenter: tbd

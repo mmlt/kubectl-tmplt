@@ -1,0 +1,33 @@
+# Create a namespace.
+#
+# Parameters:
+#   name:                       # name of namespace to create (or amend)
+#   amend: true                 # true to change an existing namespace without taking ownership for cleaning up the namespace.
+#   k8sOwner:                   # email of team that owns this namespace.
+#   k8sCostcenter:              # id for OPEX billing
+#   k8sEnvironment:             # env (like eu41t)
+#   k8sCluster:                 # cluster name (like one, cpe)
+#   k8sDomain:                  # domain (like example.com)
+#   opaExcluded: true           # (optional) set if namespace should be excluded from OPA admission checks.
+#   ingressWhitelist: true      # set to allow Ingress with host names conform k8s-cluster-design doc.
+#
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.name }}
+  labels:
+{{- if not .Values.amend }}
+    owner: {{ .Values.k8sOwner }}
+    costcenter: {{ .Values.k8sCostcenter }}
+    environment: {{ .Values.k8sEnvironment }}  
+    mmlt.nl/gitops: {{ .Values.gitops }}
+{{- end }}
+{{- if .Values.opaExcluded }}      
+    openpolicyagent.org/webhook: ignore
+{{- end }}
+{{- if .Values.ingressWhitelist }}  
+  annotations:
+    ingress-whitelist: "*.{{ .Values.name }}.{{ .Values.k8sCluster }}.{{ .Values.k8sEnvironment }}.{{ .Values.k8sDomain }}"
+{{- end }}
+
