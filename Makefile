@@ -7,7 +7,7 @@ all: install-tools generate bin
 
 # Install (code generation) tools.
 install-tools:
-	grep _ pkg/internal/tools/tools.go | cut -d'"' -f2 | xargs go install
+	grep _ ./pkg/internal/tools/tools.go | cut -d'"' -f2 | xargs go install
 
 # Generate code (expects $GOBIN to be in PATH)
 generate:
