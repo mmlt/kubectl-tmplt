@@ -4,7 +4,7 @@ on:
     tags:
     - 'v*' # Push events that match tag pattern v*, i.e. v1.0, v20.15.10
 
-name: Release tool-tmplt from master
+name: Release kubectl-tmplt from master
 
 jobs:
   build:
@@ -29,7 +29,7 @@ jobs:
       env:
         VERSION: ${{ steps.get_version.outputs.VERSION }}
 
-    - name: Create Release
+    - name: Create release
       id: create_release
       uses: actions/create-release@v1.0.0
       env:
@@ -40,8 +40,8 @@ jobs:
         draft: false
         prerelease: false
 
-    - name: Upload Release Asset
-      id: upload-release-asset 
+    - name: Upload linux-amd64
+      id: upload_release_asset
       uses: actions/upload-release-asset@v1.0.1
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -49,4 +49,26 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./bin/kubectl-tmplt-${{ steps.get_version.outputs.VERSION }}-linux-amd64
         asset_name: kubectl-tmplt-${{ steps.get_version.outputs.VERSION }}-linux-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload darwin-amd64
+      id: upload_release_asset
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./bin/kubectl-tmplt-${{ steps.get_version.outputs.VERSION }}-darwin-amd64
+        asset_name: kubectl-tmplt-${{ steps.get_version.outputs.VERSION }}-darwin-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload windows-amd64
+      id: upload_release_asset
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./bin/kubectl-tmplt-${{ steps.get_version.outputs.VERSION }}-windows-amd64.exe
+        asset_name: kubectl-tmplt-${{ steps.get_version.outputs.VERSION }}-windows-amd64.exe
         asset_content_type: application/octet-stream
