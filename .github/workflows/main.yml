@@ -20,16 +20,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@master
 
-    - name: Add ./bin to path
-      id: add_bin_to_path
-      run: echo "::add-path::./bin"
-
     - name: Get the version from tag
       id: get_version
       run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
 
     - name: Build
-      run: make all
+      run: |
+        export PATH=$PATH:$(go env GOBIN)
+        make all
       env:
         VERSION: ${{ steps.get_version.outputs.VERSION }}
 
