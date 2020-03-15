@@ -2,7 +2,5 @@ _*/
 _*
 .idea/
 bin/
-pkg/
 *.iml
-
 *.cover
