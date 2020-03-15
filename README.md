@@ -66,7 +66,7 @@ More examples in `test/e2e/testdata/`
 
 
 ## Wishlist
-- kustomize step
+- set-value flag
 - add label (also needed for prune)
 - prune
-- allow wild char input for job files; ??-*.yaml
+- kustomize step
