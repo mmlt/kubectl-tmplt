@@ -26,11 +26,8 @@ jobs:
 
     - name: Build
       run: |
-        go env
-        pwd
-        ls -l
-        tree
-        export PATH=$PATH:$(go env GOBIN)
+        export GOBIN=./bin
+        export PATH=$PATH:$GOBIN
         make all
       env:
         VERSION: ${{ steps.get_version.outputs.VERSION }}
