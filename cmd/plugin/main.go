@@ -28,7 +28,7 @@ apply - generate templates and apply them
 	setFile = flag.String("set-file", "",
 		`Yaml file with values that override template values`)
 
-	kubeContext = flag.String("kubecontext", "",
+	kubeContext = flag.String("context", "",
 		`Equivalent of kubectl --context`)
 	kubeConfig = flag.String("kubeconfig", "",
 		`Equivalent of kubectl --kubeconfig`)
