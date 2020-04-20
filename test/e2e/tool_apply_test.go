@@ -38,12 +38,6 @@ func TestApply(t *testing.T) {
 				"wait pod -l app=example --for condition=Ready",
 			},
 		},
-		/*		"create_namespace": {
-				namespaces: []string{"cpe", "cpe-system"},
-				testdata: "01",
-				jobFile: "cluster/01-cpenamespaces.yaml",
-				valuesFile: "cluster/values.yaml",
-			},*/
 		"create_ingress": {
 			setup: []string{
 				"delete ns ingress-nginx --wait",

@@ -41,7 +41,6 @@ spec:
     - args: [sleep, "3600"]
       image: ubuntu
       name: ubuntu
-
 ---
 ##02: InstrWait [wait --for condition=Ready pod -l app=example] 
 
