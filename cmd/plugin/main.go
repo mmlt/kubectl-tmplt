@@ -8,6 +8,7 @@ import (
 	"k8s.io/klog/klogr"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var (
@@ -76,7 +77,7 @@ func main() {
 	log := klogr.New()
 
 	if msg := validate(); len(msg) > 0 {
-		_, _ = fmt.Fprintln(os.Stderr, msg)
+		_, _ = fmt.Fprintln(os.Stderr, "error: ", strings.Join(msg, ", "))
 		os.Exit(1)
 	}
 
@@ -93,22 +94,21 @@ func main() {
 	)
 	err := tl.Run(os.Stdout)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, "error: ", err)
 		os.Exit(1)
 	}
 }
 
-// Validate checks flags and environment variables.
-// On validation failures it returns explanation(s).
-func validate() string {
-	var r string
+// Validate checks flags and environment variables and returns a list error strings.
+func validate() []string {
+	var r []string
 
 	if *jobFile == "" {
-		r = r + "-job-file should be defined.\n"
+		r = append(r, "-job-file should be defined")
 	}
 
 	if getMode() == tool.ModeUnknown {
-		r = r + "-m should be one of 'generate', 'apply'.\n"
+		r = append(r, "-m should be one of 'generate' or 'apply'")
 	}
 
 	return r

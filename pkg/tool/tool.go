@@ -92,12 +92,12 @@ func New(log logr.Logger,
 func (t *tool) Run(out io.Writer) error {
 	job, err := ioutil.ReadFile(t.jobFilepath)
 	if err != nil {
-		return err
+		return fmt.Errorf("job file: %w", err)
 	}
 
 	values, err := ioutil.ReadFile(t.setFilepath)
 	if err != nil {
-		return err
+		return fmt.Errorf("set file: %w", err)
 	}
 
 	return t.run(values, job, out)
@@ -144,7 +144,7 @@ func (t *tool) generate(values, job []byte) (instructions, error) {
 	}
 
 	for o := si.Next(); o != nil; o = si.Next() {
-		//TODO consider removing switch
+		//TODO consider removing switch by dispatching on 'o' instead of 't'
 		switch o.(type) {
 		case *step.Tmplt:
 			err = t.generateTmplt(o.(*step.Tmplt), vs, si.Defaults(), &instrs)
@@ -177,7 +177,7 @@ func (t *tool) generateTmplt(tmplt *step.Tmplt, globals, defaults yamlx.Values, 
 	// expand template.
 	b, err := expand.Run(t.environ, p, b1, vs)
 	if err != nil {
-		return fmt.Errorf("exapnd %s: %w", tmplt.Tmplt, err)
+		return fmt.Errorf("expand %s: %w", tmplt.Tmplt, err)
 	}
 
 	o := filepath.Base(tmplt.Tmplt)
@@ -228,13 +228,12 @@ func (t *tool) apply(instrs instructions) error {
 		var err error
 		var exp exponential
 
-		//TODO consider removing switch
 		switch instr.typ {
 		case InstrWait:
 			if t.dryRun {
 				continue
 			}
-			end := time.Now().Add(5 * time.Minute)
+			end := time.Now().Add(10 * time.Minute)
 			for !time.Now().After(end) {
 				stdout, _, err = kubectl.RunTxt(t.log, opt, instr.input, instr.args...)
 				if strings.Contains(stdout, "condition met") {
@@ -244,6 +243,8 @@ func (t *tool) apply(instrs instructions) error {
 			}
 		case InstrApply:
 			stdout, _, err = kubectl.RunTxt(t.log, opt, instr.input, instr.args...)
+		default:
+			return fmt.Errorf("unexpected instruction: %v", instr.typ)
 		}
 		stdout = strings.TrimSuffix(stdout, "\n")
 		t.log.Info(instr.name(), "id", instr.id, "tpl", instr.origin, "msg", stdout)
