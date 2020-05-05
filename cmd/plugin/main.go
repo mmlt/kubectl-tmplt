@@ -3,11 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/go-logr/stdr"
 	"github.com/mmlt/kubectl-tmplt/pkg/tool"
-	"k8s.io/klog"
-	"k8s.io/klog/klogr"
+	stdlog "log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -18,14 +19,14 @@ var (
 	mode = flag.String("m", "",
 		`Mode is one of;
 generate - write expanded templates to stdout
-apply - generate templates and apply them
-`)  //TODO "prune", "apply-prune" or allow -m apply,prune
+apply - generate templates and apply them`)
+	//TODO "prune", "apply-prune" or allow -m apply,prune
 	//TODO label = flag.String("l", "",
 	//	`Label is a key=value that is added to all applied resources. Prune uses this label to delete resources.`)
 	dryRun = flag.Bool("dry-run", false,
 		`Dry-run prevents any change being made to the target cluster`)
 	jobFile = flag.String("job-file", "",
-		`Yaml file with steps to perform.`)
+		`Yaml file with steps to perform`)
 	setFile = flag.String("set-file", "",
 		`Yaml file with values that override template values`)
 
@@ -35,6 +36,9 @@ apply - generate templates and apply them
 		`Equivalent of kubectl --kubeconfig`)
 	kubeCtl = flag.String("kubectl", "kubectl",
 		`The binary to access the target cluster with`)
+
+	verbosity = flag.String("v", "0",
+		`Log verbosity, higher numbers produce more output`)
 
 	// Usage text argument: %[1]=program name, %[2]=program version.
 	usage = `%[1]s %[2]s 
@@ -67,19 +71,16 @@ func main() {
 		_, _ = fmt.Fprintf(os.Stderr, usage, filepath.Base(os.Args[0]), Version)
 		flag.PrintDefaults()
 	}
-	// klog
-	defer klog.Flush()
-	klog.InitFlags(nil)
-	flag.Set("alsologtostderr", "true")
-
 	flag.Parse()
 
-	log := klogr.New()
-
 	if msg := validate(); len(msg) > 0 {
-		_, _ = fmt.Fprintln(os.Stderr, "error: ", strings.Join(msg, ", "))
+		_, _ = fmt.Fprintln(os.Stderr, "E", strings.Join(msg, ", "))
 		os.Exit(1)
 	}
+
+	v, _ := strconv.Atoi(*verbosity)
+	stdr.SetVerbosity(v)
+	log := stdr.New(stdlog.New(os.Stderr, "I ", stdlog.Ltime))
 
 	tl := tool.New(
 		log,
@@ -94,7 +95,7 @@ func main() {
 	)
 	err := tl.Run(os.Stdout)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "error: ", err)
+		_, _ = fmt.Fprintln(os.Stderr, "E", err)
 		os.Exit(1)
 	}
 }
@@ -109,6 +110,10 @@ func validate() []string {
 
 	if getMode() == tool.ModeUnknown {
 		r = append(r, "-m should be one of 'generate' or 'apply'")
+	}
+
+	if i, _ := strconv.Atoi(*verbosity); i < 0 || i > 5 {
+		r = append(r, "-verbosity should be in the range 0..5")
 	}
 
 	return r

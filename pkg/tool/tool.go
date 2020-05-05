@@ -95,9 +95,13 @@ func (t *tool) Run(out io.Writer) error {
 		return fmt.Errorf("job file: %w", err)
 	}
 
-	values, err := ioutil.ReadFile(t.setFilepath)
-	if err != nil {
-		return fmt.Errorf("set file: %w", err)
+	values := []byte{}
+	// Values file is optional.
+	if t.setFilepath != "" {
+		values, err = ioutil.ReadFile(t.setFilepath)
+		if err != nil {
+			return fmt.Errorf("set file: %w", err)
+		}
 	}
 
 	return t.run(values, job, out)
