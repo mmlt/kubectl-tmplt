@@ -251,7 +251,7 @@ func (t *tool) apply(instrs instructions) error {
 			return fmt.Errorf("unexpected instruction: %v", instr.typ)
 		}
 		stdout = strings.TrimSuffix(stdout, "\n")
-		t.log.Info(instr.name(), "id", instr.id, "tpl", instr.origin, "msg", stdout)
+		t.log.Info(stdout, "op", instr.name(), "id", instr.id, "tpl", instr.origin)
 		if err != nil {
 			return fmt.Errorf("##%d tpl %s: %w", instr.id, instr.origin, err)
 		}
