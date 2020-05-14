@@ -8,7 +8,6 @@ import (
 	stdlog "log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -37,8 +36,11 @@ apply - generate templates and apply them`)
 	kubeCtl = flag.String("kubectl", "kubectl",
 		`The binary to access the target cluster with`)
 
-	verbosity = flag.String("v", "0",
+	verbosity = flag.Int("v", 0,
 		`Log verbosity, higher numbers produce more output`)
+
+	version = flag.Bool("version", false,
+		"Print version")
 
 	// Usage text argument: %[1]=program name, %[2]=program version.
 	usage = `%[1]s %[2]s 
@@ -73,13 +75,17 @@ func main() {
 	}
 	flag.Parse()
 
+	if *version {
+		fmt.Println(filepath.Base(os.Args[0]), Version)
+		os.Exit(0)
+	}
+
 	if msg := validate(); len(msg) > 0 {
 		_, _ = fmt.Fprintln(os.Stderr, "E", strings.Join(msg, ", "))
 		os.Exit(1)
 	}
 
-	v, _ := strconv.Atoi(*verbosity)
-	stdr.SetVerbosity(v)
+	stdr.SetVerbosity(*verbosity)
 	log := stdr.New(stdlog.New(os.Stderr, "I ", stdlog.Ltime))
 
 	tl := tool.New(
@@ -112,7 +118,7 @@ func validate() []string {
 		r = append(r, "-m should be one of 'generate' or 'apply'")
 	}
 
-	if i, _ := strconv.Atoi(*verbosity); i < 0 || i > 5 {
+	if *verbosity < 0 || *verbosity > 5 {
 		r = append(r, "-verbosity should be in the range 0..5")
 	}
 

@@ -29,7 +29,7 @@ const (
 	// ModePrune removes the resources from the target cluster that are not in the generated
 	// resources but are within a label selection.
 	// NB. how is remove resources that are still in use by 'old' pods during roling update is TBD.
-	ModePrune Mode = 1 << iota
+	//ModePrune Mode = 1 << iota
 )
 
 // Tool is responsible for reading a job file and one or more template files,
@@ -237,6 +237,7 @@ func (t *tool) apply(instrs instructions) error {
 			if t.dryRun {
 				continue
 			}
+			t.logInstr("", instr)
 			end := time.Now().Add(10 * time.Minute)
 			for !time.Now().After(end) {
 				stdout, _, err = kubectl.RunTxt(t.log, opt, instr.input, instr.args...)
@@ -247,17 +248,22 @@ func (t *tool) apply(instrs instructions) error {
 			}
 		case InstrApply:
 			stdout, _, err = kubectl.RunTxt(t.log, opt, instr.input, instr.args...)
+			t.logInstr(stdout, instr)
 		default:
 			return fmt.Errorf("unexpected instruction: %v", instr.typ)
 		}
-		stdout = strings.TrimSuffix(stdout, "\n")
-		t.log.Info(stdout, "op", instr.name(), "id", instr.id, "tpl", instr.origin)
+
 		if err != nil {
 			return fmt.Errorf("##%d tpl %s: %w", instr.id, instr.origin, err)
 		}
 	}
 
 	return nil
+}
+
+func (t *tool) logInstr(msg string, instr instruction) {
+	msg = strings.TrimSuffix(msg, "\n")
+	t.log.Info(msg, "op", instr.name(), "id", instr.id, "tpl", instr.origin)
 }
 
 // Exponential Sleep
