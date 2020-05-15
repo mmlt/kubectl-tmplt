@@ -237,7 +237,7 @@ func (t *tool) apply(instrs instructions) error {
 			if t.dryRun {
 				continue
 			}
-			t.logInstr("", instr)
+			t.logInstr(strings.Join(instr.args, " "), instr)
 			end := time.Now().Add(10 * time.Minute)
 			for !time.Now().After(end) {
 				stdout, _, err = kubectl.RunTxt(t.log, opt, instr.input, instr.args...)
@@ -263,7 +263,7 @@ func (t *tool) apply(instrs instructions) error {
 
 func (t *tool) logInstr(msg string, instr instruction) {
 	msg = strings.TrimSuffix(msg, "\n")
-	t.log.Info(msg, "op", instr.name(), "id", instr.id, "tpl", instr.origin)
+	t.log.Info(instr.name(), "id", instr.id, "txt", msg, "tpl", instr.origin)
 }
 
 // Exponential Sleep
