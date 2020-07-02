@@ -1,0 +1,3 @@
+The secret called "secret-txt" contains {{ vault "secret-txt" "" }}
+
+While "secret-json" contains user={{ vault "secret-json" "user" }} password={{ vault "secret-json" "password" }}

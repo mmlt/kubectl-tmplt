@@ -1,0 +1,4 @@
+type: getSecret
+namespace: {{ .Values.namespace }}
+name: vault-unseal-keys
+

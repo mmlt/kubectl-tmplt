@@ -8,27 +8,27 @@ import (
 	"path/filepath"
 )
 
-// Testfiles holds the path of the temporary directory used to create test files in.
-type testfiles string
+// Testdir is the path to a temporary directory used to create test files in.
+type testdir string
 
-// TestFilesNew creates a temporary directory for testing.
-func testFilesNew() testfiles {
-	p, err := ioutil.TempDir("", "testfiles")
+// MustCreateTestDir creates a temporary directory for testing.
+func MustCreateTestDir(pattern string) testdir {
+	p, err := ioutil.TempDir("", pattern)
 	if err != nil {
 		panic(err)
 	}
-	return testfiles(p)
+	return testdir(p)
 }
 
 // Path returns the absolute path of 'path' in the test directory.
-func (tf testfiles) Path(path ...string) string {
-	p := append([]string{string(tf)}, path...)
+func (td testdir) Path(path ...string) string {
+	p := append([]string{string(td)}, path...)
 	return filepath.Join(p...)
 }
 
 // MustRemove removes the file at 'path' from the test directory.
-func (tf testfiles) MustRemove(path string) {
-	ap := tf.Path(path)
+func (td testdir) MustRemove(path string) {
+	ap := td.Path(path)
 	err := os.Remove(ap)
 	if err != nil {
 		panic(err)
@@ -36,19 +36,19 @@ func (tf testfiles) MustRemove(path string) {
 }
 
 // MustRemoveAll removes the test directory.
-func (tf testfiles) MustRemoveAll() {
-	err := os.RemoveAll(string(tf))
+func (td testdir) MustRemoveAll() {
+	err := os.RemoveAll(string(td))
 	if err != nil {
 		panic(err)
 	}
 }
 
 // MustCreate create a file at 'path' with content 'text' in the test directory.
-func (tf testfiles) MustCreate(path, text string) {
+func (td testdir) MustCreate(path, text string) {
 	if path == "" {
 		return
 	}
-	p := tf.Path(path)
+	p := td.Path(path)
 	d := filepath.Dir(p)
 	err := os.MkdirAll(d, 0700)
 	if err != nil {
@@ -61,8 +61,8 @@ func (tf testfiles) MustCreate(path, text string) {
 }
 
 // MustCopy recursive copy of src files to dst in test directory.
-func (tf testfiles) MustCopy(src, dst string) {
-	err := copy.Copy(src, tf.Path(dst))
+func (td testdir) MustCopy(src, dst string) {
+	err := copy.Copy(src, td.Path(dst))
 
 	if err != nil {
 		panic(err)

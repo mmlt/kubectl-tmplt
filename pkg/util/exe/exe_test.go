@@ -1,6 +1,7 @@
 package exe
 
 import (
+	"context"
 	"github.com/go-logr/stdr"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -52,7 +53,7 @@ func TestRun(t *testing.T) {
 
 	for name, tst := range tests {
 		t.Run(name, func(t *testing.T) {
-			stdout, stderr, err := Run(log, tst.options, tst.in, tst.cmd, tst.args...)
+			stdout, stderr, err := Run(context.Background(), log, tst.options, tst.in, tst.cmd, tst.args...)
 			if tst.wantErr != "" {
 				assert.EqualError(t, err, tst.wantErr)
 			} else {

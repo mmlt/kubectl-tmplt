@@ -1,3 +1,15 @@
+---
+##01.01: InstrApply [apply -f -] namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: example
+  labels:
+    openpolicyagent.org/webhook: ignore
+
+
+---
+##02.01: InstrApply [apply -f -] ingress-nginx-shared.yaml
 # This file contains resources shared between multiple ingress-nginx instances.
 # 
 # Parameters:
@@ -10,7 +22,7 @@ metadata:
   labels:
     app.kubernetes.io/name: ingress-nginx
     app.kubernetes.io/part-of: ingress-nginx
-    mmlt.nl/gitops: {{ .Values.gitops }}
+    mmlt.nl/gitops: k8s-clusters-addons.test
 rules:
   - apiGroups:
       - ""
@@ -60,6 +72,7 @@ rules:
       - update
 
 ---
+##02.02: InstrApply [apply -f -] ingress-nginx-shared.yaml
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
@@ -67,7 +80,7 @@ metadata:
   labels:
     app.kubernetes.io/name: ingress-nginx
     app.kubernetes.io/part-of: ingress-nginx
-    mmlt.nl/gitops: {{ .Values.gitops }}
+    mmlt.nl/gitops: k8s-clusters-addons.test
 spec:
   allowedCapabilities:
     - NET_BIND_SERVICE
@@ -100,3 +113,4 @@ spec:
   hostPorts:
     - max: 65535
       min: 1
+

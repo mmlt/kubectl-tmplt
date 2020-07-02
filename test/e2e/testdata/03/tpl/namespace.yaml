@@ -1,0 +1,12 @@
+# Create a namespace.
+#
+# Parameters:
+#   name:                       # name of namespace to create
+#
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.name }}
+
+

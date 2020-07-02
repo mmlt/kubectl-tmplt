@@ -1,0 +1,43 @@
+steps:
+  ### Namespace
+  - tmplt: tpl/namespace.yaml
+    values:
+      name: kt-test
+
+  ### Hashi Corp Vault
+  - tmplt: tpl/vault/bank-vaults.yaml
+    values:
+      etcd-operator:
+        enabled: false
+      etcd:
+        resources:
+          limits:
+            cpu: 100m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+      operator:
+        resources:
+          limits:
+            cpu: 100m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+
+  - tmplt: tpl/vault/vault-rbac.yaml
+
+  - tmplt: tpl/vault/vault-cr.yaml
+
+  - wait: --namespace kt-test --for condition=Ready pod vault-0
+
+  ### Config Vault
+  - action: act/get-vault-token.yaml
+
+  - action: act/set-vault-kv.yaml
+    portForward: -n kt-test pod/vault-0 8200
+
+defaults:
+  namespace: "kt-test"
+  gitops: kt-test

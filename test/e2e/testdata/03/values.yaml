@@ -1,0 +1,5 @@
+k8sEnvironment: local
+k8sCluster: e2e
+k8sDomain: example.com
+k8sProvider: minikube
+

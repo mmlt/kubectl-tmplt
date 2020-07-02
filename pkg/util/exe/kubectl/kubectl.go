@@ -1,7 +1,7 @@
 package kubectl
 
 import (
-	"encoding/json"
+	"context"
 	"github.com/go-logr/logr"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/exe"
 )
@@ -20,8 +20,9 @@ type Opt struct {
 	DryRun bool
 }
 
-// RunTxt executes kubectl with 'stdin', 'args' and 'options' and returns stdout and stderr.
-func RunTxt(log logr.Logger, options *Opt, stdin string, args ...string) (stdout string, stderr string, err error) {
+// Run executes kubectl with 'stdin', 'args' and 'options' and returns stdout and stderr.
+// Ctx is optional.
+func Run(ctx context.Context, log logr.Logger, options *Opt, stdin string, args ...string) (stdout string, stderr string, err error) {
 	c := "kubectl"
 	var o *exe.Opt
 	var a []string
@@ -49,26 +50,9 @@ func RunTxt(log logr.Logger, options *Opt, stdin string, args ...string) (stdout
 	}
 
 	// run cmd.
-	stdout, stderr, err = exe.Run(log, o, stdin, c, a...)
+	stdout, stderr, err = exe.Run(ctx, log, o, stdin, c, a...)
 
 	return
-}
-
-// Run executes kubectl with 'stdin', 'args' and 'options' and returns parsed json output.
-func Run(log logr.Logger, options *Opt, stdin string, args ...string) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
-	a := copySS(args)
-	a = append(a, "-o", "json")
-
-	sout, _, err := RunTxt(log, options, stdin, a...)
-	if err != nil {
-		return result, nil
-	}
-	err = json.Unmarshal([]byte(sout), &result)
-	if err != nil {
-		log.Error(err, "Parsing kubectl json output", "args", a, "json", sout)
-	}
-	return result, err
 }
 
 func copySS(ss []string) []string {

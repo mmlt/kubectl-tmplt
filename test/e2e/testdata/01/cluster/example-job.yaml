@@ -1,0 +1,14 @@
+# This is an example job file.
+steps:
+- tmplt: ../tpl/namespace.yaml
+  values:
+    name: example
+    opaExcluded: true
+
+- tmplt: ../tpl/ingress-nginx-shared.yaml
+
+# default values for all template expansions (also see values.yaml)
+defaults:
+  gitops: k8s-clusters-addons.test
+  k8sOwner: example
+  k8sCostcenter: tbd

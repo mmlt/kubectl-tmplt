@@ -1,97 +1,90 @@
-// e2e testing of tool using a local k8s cluster.
 package e2e_test
 
 import (
+	"github.com/go-logr/logr"
+	"github.com/mmlt/kubectl-tmplt/pkg/execute"
 	"github.com/mmlt/kubectl-tmplt/pkg/tool"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/exe/kubectl"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/klog/klogr"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-//
+// TestApply runs the tool in 'apply' mode against a local cluster and check post conditions.
+// kube/config current context selects the cluster to use.
 func TestApply(t *testing.T) {
-	var tests = map[string]struct {
+	log := klogr.New()
+
+	var tests = []struct {
+		// it describes what the test proves.
+		it string
 		// setup are the kubectl commands to prepare the target cluster for the test.
 		setup []string
-		// testdata subdirectory used by this test.
-		testdata string
-		// jobfile relative to testdata.
-		jobFile string
-		// valuesFile relative to testdata.
-		valuesFile string
+		// subject is what is tested.
+		subject tool.Tool
 		// postConditions that should be met upon completion.
 		// See kubectl wait.
 		postConditions []string
+		// resources is a comma separated list of the required external resources to run a test
+		resources string
 	}{
-		"example": {
+		{
+			it: "should_deploy_and_configure_vault_with_values_from_filevault",
 			setup: []string{
-				"delete pod -l app=example --wait",
+				// test with a freshly created Vault (beware; deleting and recreating vault takes minutes)
+				"-n kt-test delete vault vault",
+				"-n kt-test wait --for=delete pod/vault-0",
+				"-n kt-test delete pvc vault-file --wait",
+				"-n kt-test delete secret vault-unseal-keys --wait",
 			},
-			testdata:   "00",
-			jobFile:    "job.yaml",
-			valuesFile: "values.yaml",
+			subject: tool.Tool{
+				Environ:     []string{},
+				JobFilepath: "testdata/03/job.yaml",
+				SetFilepath: "testdata/03/values.yaml",
+				VaultPath:   "testdata/filevault",
+				Execute: &execute.Execute{
+					//TODO why is env needed? Environ:        []string{},
+					Kubectl: execute.Kubectl{
+						//TODO nil means use parent env
+						//Environ:     []string{},
+						Log: log,
+					},
+					//Out:            nil,
+					Log: log,
+				},
+				Log: log,
+			},
 			postConditions: []string{
-				"wait pod -l app=example --for condition=Ready",
+				//"wait pod -l app=example --for condition=Ready",
 			},
-		},
-		"create_ingress": {
-			setup: []string{
-				"delete ns ingress-nginx --wait",
-			},
-			testdata:   "01",
-			jobFile:    "cluster/05-ingress.yaml",
-			valuesFile: "cluster/values.yaml",
-			postConditions: []string{
-				"wait -n ingress-nginx deployment default-http-backend-in --for condition=Available",
-				"wait -n ingress-nginx deployment default-http-backend-ex --for condition=Available",
-				"wait -n ingress-nginx deployment nginx-ingress-controller-in --for condition=Available",
-				"wait -n ingress-nginx deployment nginx-ingress-controller-ex --for condition=Available",
-			},
+			resources: "k8s",
 		},
 	}
 
-	log := klogr.New()
-
-	// safety check to prevent taking down a real cluster.
-	out, _, err := kubectl.RunTxt(log, &kubectl.Opt{}, "", "config", "current-context")
+	// prevent taking down a real cluster by accident.
+	out, _, err := kubectl.Run(nil, log, &kubectl.Opt{}, "", "config", "current-context")
 	assert.NoError(t, err)
 	assert.Regexp(t, "minikube|microk8s|local", out, "current-context must refer to a local cluster")
 
-	for name, tst := range tests {
-		t.Run(name, func(t *testing.T) {
-			// create tmp directory for testdata.
-			tf := testFilesNew()
-			defer tf.MustRemoveAll()
-			dir, err := os.Getwd()
-			assert.NoError(t, err)
-			tf.MustCopy(filepath.Join(dir, "testdata", tst.testdata), tst.testdata)
-
-			// setup (ignoring 'not found' errors).
-			for _, cmd := range tst.setup {
-				cmd := strings.Split(cmd, " ")
-				_, _, _ = kubectl.RunTxt(log, nil, "", cmd...)
+	for _, tst := range tests {
+		t.Run(tst.it, func(t *testing.T) {
+			if !available(tst.resources) {
+				t.Skip("not all resource are available:", tst.resources)
+				return
 			}
 
-			// run tool.
-			tl := tool.New(
-				log,
-				"", "", "",
-				os.Environ(),
-				tool.ModeApply,
-				false,
-				tf.Path(tst.testdata, tst.jobFile),
-				tf.Path(tst.testdata, tst.valuesFile))
-			err = tl.Run(os.Stdout)
+			// clean
+			setup(t, tst.setup, log)
+
+			// run
+			err = tst.subject.Run()
 			assert.NoError(t, err)
 
 			// check conditions.
 			for _, cmd := range tst.postConditions {
 				cmd := strings.Split(cmd, " ")
-				sout, _, err := kubectl.RunTxt(log, nil, "", cmd...)
+				sout, _, err := kubectl.Run(nil, log, nil, "", cmd...)
 				assert.NoError(t, err)
 				assert.Contains(t, sout, "condition met")
 			}
@@ -101,24 +94,14 @@ func TestApply(t *testing.T) {
 	}
 }
 
-/*// GetNamespaces
-func getNamespaces(log logr.Logger) ([]string, error) {
-	json, err := kubectl.Run(log, nil, "", "get", "ns")
-	if err != nil {
-		return nil, err
-	}
-	jq, err := gojq.Parse(".items[].metadata.name")
-	if err != nil {
-		return nil, err
-	}
-
-	var result []string
-	itr := jq.Run(json)
-	for v, ok := itr.Next(); ok; v, ok = itr.Next() {
-		if err, ok := v.(error); ok {
-			return nil, err
+// Setup runs kubectl cmds against target cluster.
+func setup(t *testing.T, cmds []string, log logr.Logger) {
+	for _, cmd := range cmds {
+		cmd := strings.Split(cmd, " ")
+		_, _, err := kubectl.Run(nil, log, nil, "", cmd...)
+		if err == nil || strings.Contains(err.Error(), "Error from server (NotFound):") {
+			continue
 		}
-		result = append(result, v)
+		assert.NoError(t, err)
 	}
-	return result, nil
-}*/
+}

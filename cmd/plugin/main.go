@@ -4,52 +4,236 @@ import (
 	"flag"
 	"fmt"
 	"github.com/go-logr/stdr"
+	"github.com/mmlt/kubectl-tmplt/pkg/execute"
 	"github.com/mmlt/kubectl-tmplt/pkg/tool"
+	"io"
 	stdlog "log"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-var (
-	// Version as set during build.
-	Version string
+// Version as set during go build.
+var Version string
 
-	mode = flag.String("m", "",
+func main() {
+	var mode modeFlag
+	flag.Var(&mode, "m",
 		`Mode is one of;
-generate - write expanded templates to stdout
-apply - generate templates and apply them`)
-	//TODO "prune", "apply-prune" or allow -m apply,prune
-	//TODO label = flag.String("l", "",
-	//	`Label is a key=value that is added to all applied resources. Prune uses this label to delete resources.`)
-	dryRun = flag.Bool("dry-run", false,
+apply - generates and applies templates to the target cluster but doesn't perform actions
+apply-with-actions - generates and applies templates and actions to the target cluster
+generate - generates templates and writes them to stdout instead of applying them
+generate-with-actions - generates templates and actions and writes them to stdout instead of applying them`)
+	var dryRun bool
+	flag.BoolVar(&dryRun, "dry-run", false,
 		`Dry-run prevents any change being made to the target cluster`)
-	jobFile = flag.String("job-file", "",
-		`Yaml file with steps to perform`)
-	setFile = flag.String("set-file", "",
-		`Yaml file with values that override template values`)
 
-	kubeContext = flag.String("context", "",
+	var jobFile string
+	flag.StringVar(&jobFile, "job-file", "",
+		`Yaml file with steps to perform`)
+	var setFile string
+	flag.StringVar(&setFile, "set-file", "",
+		`Yaml file with values that override template values`)
+	var values setValuesFlag
+	flag.Var(&values, "set-value",
+		`Set value to be used as template value, multiple set-value's are allowed`)
+
+	var kubeContext, kubeConfig, kubeCtl string
+	flag.StringVar(&kubeContext, "context", "",
 		`Equivalent of kubectl --context`)
-	kubeConfig = flag.String("kubeconfig", "",
+	flag.StringVar(&kubeConfig, "kubeconfig", "",
 		`Equivalent of kubectl --kubeconfig`)
-	kubeCtl = flag.String("kubectl", "kubectl",
+	flag.StringVar(&kubeCtl, "kubectl", "kubectl",
 		`The binary to access the target cluster with`)
 
-	verbosity = flag.Int("v", 0,
+	var masterVaultPath string
+	flag.StringVar(&masterVaultPath, "master-vault-path", "",
+		`Path to a directory containing files;
+type - Type of vault to read from, valid values are: azure-key-vault | file
+url - URL of Vault
+clientID, clientSecret - Credential to access vault (cli credentials are used if absent)`)
+	var verbosity int
+	flag.IntVar(&verbosity, "v", 0,
 		`Log verbosity, higher numbers produce more output`)
-
-	version = flag.Bool("version", false,
+	var version bool
+	flag.BoolVar(&version, "version", false,
 		"Print version")
+	var hlp bool
+	flag.BoolVar(&hlp, "help", false,
+		`Help page`)
 
-	// Usage text argument: %[1]=program name, %[2]=program version.
-	usage = `%[1]s %[2]s 
-%[1]s reads a job file and performs the steps. A step can be one of:
+	flag.Parse()
+
+	if hlp {
+		fmt.Fprintf(os.Stderr, help, filepath.Base(os.Args[0]), Version)
+		os.Exit(0)
+	}
+
+	if version {
+		fmt.Println(filepath.Base(os.Args[0]), Version)
+		os.Exit(0)
+	}
+
+	if msg := validate(jobFile, verbosity); len(msg) > 0 {
+		_, _ = fmt.Fprintln(os.Stderr, strings.Join(msg, ", "))
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	stdr.SetVerbosity(verbosity)
+	log := stdr.New(stdlog.New(os.Stderr, "I ", stdlog.Ltime))
+
+	var out io.Writer
+	if mode.V&tool.ModeGenerate != 0 {
+		//TODO move this to tool?
+		out = os.Stdout
+	}
+
+	environ := os.Environ()
+
+	t := tool.Tool{
+		Mode:        mode.V,
+		DryRun:      dryRun,
+		Environ:     os.Environ(),
+		JobFilepath: jobFile,
+		SetFilepath: setFile,
+		VaultPath:   masterVaultPath,
+		Execute: &execute.Execute{
+			Environ: environ,
+			Kubectl: execute.Kubectl{
+				KubeConfig:  kubeConfig,
+				KubeContext: kubeContext,
+				KubeCtl:     kubeCtl,
+				Environ:     environ,
+				Log:         log,
+			},
+			Out: out,
+			Log: log,
+		},
+		Log: log,
+	}
+	err := t.Run() //TODO pass values.V as override values
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, "E", err)
+		os.Exit(1)
+	}
+}
+
+// Validate checks flags and environment variables and returns a list error strings.
+func validate(jobFile string, verbosity int) []string {
+	var r []string
+
+	if jobFile == "" {
+		r = append(r, "-job-file should be defined")
+	}
+
+	if verbosity < 0 || verbosity > 5 {
+		r = append(r, "-verbosity should be in the range 0..5")
+	}
+
+	return r
+}
+
+// ModeFlag is a custom flag type that accepts -m <mode>.
+type modeFlag struct {
+	V tool.Mode
+}
+
+func (f *modeFlag) String() string {
+	return fmt.Sprintf("%v", f.V)
+}
+
+func (f *modeFlag) Set(s string) error {
+	m, err := tool.ModeFromString(s)
+	f.V = m
+	return err
+}
+
+// SetValuesFlag is a custom flag type that accepts one or more --set-value k=v occurrences.
+type setValuesFlag struct {
+	V map[string]string
+}
+
+func (f *setValuesFlag) String() string {
+	if f.V != nil {
+		return fmt.Sprintf("%v", f.V)
+	}
+	return ""
+}
+
+func (f *setValuesFlag) Set(s string) error {
+	kv := strings.Split(s, "=")
+	if len(kv) != 2 {
+		return fmt.Errorf("expected key=value")
+	}
+	if f.V == nil {
+		f.V = make(map[string]string)
+	}
+	f.V[kv[0]] = kv[1]
+
+	return nil
+}
+
+// Help text
+// text argument: %[1]=program name, %[2]=program version.
+const help = `%[1]s reads a job file and performs the steps. 
+
+OVERVIEW
+A step can be one of:
     tmplt: expand a template with values and apply the result to a target k8s cluster.
-    condition: wait until a target k8s cluster satisfies a condition.
+    wait: wait until a target k8s cluster satisfies a condition.
+    action: expand a template to invoke a build-in action.
 
-Templating uses 'https://golang.org/pkg/text/template/' with 'http://masterminds.github.io/sprig/'
-and additional templating functions; toToml, to/fromYaml, to/fromJson.
+All steps except 'wait' accept 'value:' as extra arguments for template expansion.
+
+
+TMPLT
+Tmplt expands the argument template file. 
+
+
+WAIT
+Wait for a certain condition to be come true in the target cluster.
+
+
+ACTION
+Perform an action on the target cluster.
+
+All action template files contain a 'type:' field with one of the following values;
+    getSecret - to read a secret from a target cluster.
+    setVault - to write secrets to target cluster Vault.
+
+getSecret
+GetSecret reads a secret from a target cluster.
+A getSecret template contains the following arguments;
+    type: getSecret
+    namespace: namespace-of-secret
+    name: name-of-secret
+The 'data' field of the fetched Secret can be used in subsequent templates via;
+    {{ .Get.secret.namespace-of-secret.name-of-secret.data.xyz }}
+
+setVault
+SetVault writes one or more secrets to target cluster Vault.
+This action step accepts a 'portForward:' settings that tunnels a localhost connection to the target cluster. 
+A getSecret template contains the following arguments;
+    type: setVault
+	url: https://localhost:8200
+	tlsSkipVerify: "true"
+	token: {{ index .Get "secret" "namespace-of-secret" "name-of-secret" "data" "vault-root" | b64dec }}
+	config:
+	  kv:
+	  - type: kv
+		path: secret/data/kubectltmplt/test
+		data:
+		  data:
+			USER: superman
+			PW: supersecret
+
+
+TEMPLATING
+Templating uses 'https://golang.org/pkg/text/template/' with addtional functions:
+    http://masterminds.github.io/sprig/
+    toToml, to/fromYaml, to/fromJson - convert between string and object form
+	vault path/to/object field - read a value from master vault
 
 Templating examples:
     {{ .Files.Get "filename" }}
@@ -63,75 +247,4 @@ Templating examples:
     {{ (.Files.Glob "secrets/*").AsSecrets }}
 
 Beware, file access is not sanitized!
-
-Usage: %[1]s [options...]
 `
-)
-
-func main() {
-	flag.Usage = func() {
-		_, _ = fmt.Fprintf(os.Stderr, usage, filepath.Base(os.Args[0]), Version)
-		flag.PrintDefaults()
-	}
-	flag.Parse()
-
-	if *version {
-		fmt.Println(filepath.Base(os.Args[0]), Version)
-		os.Exit(0)
-	}
-
-	if msg := validate(); len(msg) > 0 {
-		_, _ = fmt.Fprintln(os.Stderr, "E", strings.Join(msg, ", "))
-		os.Exit(1)
-	}
-
-	stdr.SetVerbosity(*verbosity)
-	log := stdr.New(stdlog.New(os.Stderr, "I ", stdlog.Ltime))
-
-	tl := tool.New(
-		log,
-		*kubeCtl,
-		*kubeConfig,
-		*kubeContext,
-		os.Environ(),
-		getMode(),
-		*dryRun,
-		*jobFile,
-		*setFile,
-	)
-	err := tl.Run(os.Stdout)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "E", err)
-		os.Exit(1)
-	}
-}
-
-// Validate checks flags and environment variables and returns a list error strings.
-func validate() []string {
-	var r []string
-
-	if *jobFile == "" {
-		r = append(r, "-job-file should be defined")
-	}
-
-	if getMode() == tool.ModeUnknown {
-		r = append(r, "-m should be one of 'generate' or 'apply'")
-	}
-
-	if *verbosity < 0 || *verbosity > 5 {
-		r = append(r, "-verbosity should be in the range 0..5")
-	}
-
-	return r
-}
-
-// GetMode returns tool.Mode based on the mode flag.
-func getMode() tool.Mode {
-	switch *mode {
-	case "apply":
-		return tool.ModeApply
-	case "generate":
-		return tool.ModeGenerate
-	}
-	return tool.ModeUnknown
-}

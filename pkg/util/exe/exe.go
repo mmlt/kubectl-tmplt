@@ -2,6 +2,7 @@ package exe
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/go-logr/logr"
 	"io"
@@ -18,14 +19,24 @@ type Opt struct {
 
 // Run executes 'cmd' with 'stdin', 'args' and 'options'.
 // Upon completion it returns stdout and stderr.
-func Run(log logr.Logger, options *Opt, stdin string, cmd string, args ...string) (stdout string, stderr string, err error) {
+// Ctx is optional.
+func Run(ctx context.Context, log logr.Logger, options *Opt, stdin string, cmd string, args ...string) (stdout string, stderr string, err error) {
 	log.V(2).Info("Run", "cmd", cmd, "args", args)
 
-	c := exec.Command(cmd, args...)
+	var c *exec.Cmd
+	if ctx != nil {
+		c = exec.CommandContext(ctx, cmd, args...)
+	} else {
+		c = exec.Command(cmd, args...)
+	}
 
 	if options != nil {
-		c.Env = options.Env
-		c.Dir = options.Dir
+		if options.Env != nil {
+			c.Env = options.Env
+		}
+		if options.Dir != "" {
+			c.Dir = options.Dir
+		}
 	}
 
 	if stdin != "" {
@@ -45,10 +56,13 @@ func Run(log logr.Logger, options *Opt, stdin string, cmd string, args ...string
 	c.Stdout, c.Stderr = &sout, &serr
 	err = c.Run()
 	stdout, stderr = string(sout.Bytes()), string(serr.Bytes())
-	log.V(3).Info("Run-result", "stderr", stderr, "stdout", stdout)
-	if err != nil {
+	if err != nil && err.Error() != "signal: killed" {
+		// Do not consider 'signal: killed' an error as the log line might cause the user to think something went wrong.
+		// Signal kill is the result of port-forward being stopped by context Cancel().
+		log.Error(err, "Run-result", "stderr", stderr)
 		return "", "", fmt.Errorf("%s %v: %w - %s", cmd, args, err, stderr)
 	}
+	log.V(3).Info("Run-result", "stderr", stderr, "stdout", stdout)
 
 	return
 }

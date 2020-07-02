@@ -1,0 +1,16 @@
+---
+##01.01: InstrApply [apply -f -] template.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "test"
+  namespace: "default"
+  labels:
+    app: example
+spec:
+  containers:
+    - args: [sleep, "3600"]
+      image: ubuntu
+      name: ubuntu
+---
+##02: InstrWait [wait --for condition=Ready pod -l app=example]
