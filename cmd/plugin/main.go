@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/stdr"
 	"github.com/mmlt/kubectl-tmplt/pkg/execute"
 	"github.com/mmlt/kubectl-tmplt/pkg/tool"
+	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	"io"
 	stdlog "log"
 	"os"
@@ -48,10 +49,7 @@ generate-with-actions - generates templates and actions and writes them to stdou
 
 	var masterVaultPath string
 	flag.StringVar(&masterVaultPath, "master-vault-path", "",
-		`Path to a directory containing files;
-type - Type of vault to read from, valid values are: azure-key-vault | file
-url - URL of Vault
-clientID, clientSecret - Credential to access vault (cli credentials are used if absent)`)
+		`Path to a directory containing master vault configuration (also see help)`)
 	var verbosity int
 	flag.IntVar(&verbosity, "v", 0,
 		`Log verbosity, higher numbers produce more output`)
@@ -92,12 +90,12 @@ clientID, clientSecret - Credential to access vault (cli credentials are used if
 	environ := os.Environ()
 
 	t := tool.Tool{
-		Mode:        mode.V,
-		DryRun:      dryRun,
-		Environ:     os.Environ(),
-		JobFilepath: jobFile,
-		SetFilepath: setFile,
-		VaultPath:   masterVaultPath,
+		Mode:          mode.V,
+		DryRun:        dryRun,
+		Environ:       os.Environ(),
+		JobFilepath:   jobFile,
+		ValueFilepath: setFile,
+		VaultPath:     masterVaultPath,
 		Execute: &execute.Execute{
 			Environ: environ,
 			Kubectl: execute.Kubectl{
@@ -112,7 +110,7 @@ clientID, clientSecret - Credential to access vault (cli credentials are used if
 		},
 		Log: log,
 	}
-	err := t.Run() //TODO pass values.V as override values
+	err := t.Run(values.V)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "E", err)
 		os.Exit(1)
@@ -151,7 +149,7 @@ func (f *modeFlag) Set(s string) error {
 
 // SetValuesFlag is a custom flag type that accepts one or more --set-value k=v occurrences.
 type setValuesFlag struct {
-	V map[string]string
+	V yamlx.Values
 }
 
 func (f *setValuesFlag) String() string {
@@ -167,7 +165,7 @@ func (f *setValuesFlag) Set(s string) error {
 		return fmt.Errorf("expected key=value")
 	}
 	if f.V == nil {
-		f.V = make(map[string]string)
+		f.V = make(yamlx.Values)
 	}
 	f.V[kv[0]] = kv[1]
 
@@ -178,7 +176,9 @@ func (f *setValuesFlag) Set(s string) error {
 // text argument: %[1]=program name, %[2]=program version.
 const help = `%[1]s reads a job file and performs the steps. 
 
-OVERVIEW
+
+
+STEPS
 A step can be one of:
     tmplt: expand a template with values and apply the result to a target k8s cluster.
     wait: wait until a target k8s cluster satisfies a condition.
@@ -187,18 +187,17 @@ A step can be one of:
 All steps except 'wait' accept 'value:' as extra arguments for template expansion.
 
 
-TMPLT
-Tmplt expands the argument template file. 
+TMPLT STEP
+A tmplt step expands the argument template file. 
 
 
-WAIT
-Wait for a certain condition to be come true in the target cluster.
+WAIT STEP
+A wait step halts until a certain condition in the target cluster becomes true.
 
 
-ACTION
-Perform an action on the target cluster.
-
-All action template files contain a 'type:' field with one of the following values;
+ACTION STEP
+An action step perform an action on the target cluster. The kind of action is set by the 'type:' field.
+Type can be one of;
     getSecret - to read a secret from a target cluster.
     setVault - to write secrets to target cluster Vault.
 
@@ -208,7 +207,12 @@ A getSecret template contains the following arguments;
     type: getSecret
     namespace: namespace-of-secret
     name: name-of-secret
-The 'data' field of the fetched Secret can be used in subsequent templates via;
+    postCondition: an-optional-expression
+If a postCondition is present getSecret will be retried until the condition becomes 'true'.
+Expressions use https://golang.org/pkg/text/template/ syntax without the curlies. 
+For example postCondition: gt (len (index .data "xyz")) 10 is 'true' when the .data.xyz field of the fetched Secret
+contains more then 10 characters.
+When a Secret is successfully fetched its 'data' field can be used in subsequent templates via;
     {{ .Get.secret.namespace-of-secret.name-of-secret.data.xyz }}
 
 setVault
@@ -233,7 +237,7 @@ TEMPLATING
 Templating uses 'https://golang.org/pkg/text/template/' with addtional functions:
     http://masterminds.github.io/sprig/
     toToml, to/fromYaml, to/fromJson - convert between string and object form
-	vault path/to/object field - read a value from master vault
+	vault path/to/object field - read a value from master vault (also see MASTER VAULT)
 
 Templating examples:
     {{ .Files.Get "filename" }}
@@ -246,5 +250,26 @@ Templating examples:
 	
     {{ (.Files.Glob "secrets/*").AsSecrets }}
 
+    {{ vault "secretname" "fieldname" }}
+
 Beware, file access is not sanitized!
+
+
+MASTER VAULT
+The master vault config directory contains config files to access a remote KeyVault or a local file vault.
+Files:
+    type - contains 'azure-key-vault' or 'file'
+Files when type contains 'azure-key-vault':
+    cli - if 'true' the 'az login' token is used to access the KeyVault otherwise the 'VAULT_*' values are used.
+    URL - contains the KeyVault URL
+    VAULT_ - files contain values to authenticate with KeyVault. Filename matches environment variable name,
+        file content is the environment variable value.
+        See https://docs.microsoft.com/en-us/azure/go/azure-sdk-go-authorization#use-environment-based-authentication
+Files when type contains 'file':
+Any number of files is allowed. The filename matches the secret name, the file contents is the secret value.
+
+For example a secret named 'xyz' with value '{"name":"superman"}'
+    {{ vault "xyz" "name" }} expands to superman
+    {{ vault "xyz" "" }} expands to {"name":"superman"}
+NB. JSON is valid YAML
 `

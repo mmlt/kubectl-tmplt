@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/hashicorp/vault/api"
+	"github.com/mmlt/kubectl-tmplt/pkg/util/backoff"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	"gopkg.in/yaml.v3"
 	"strings"
@@ -110,8 +111,14 @@ func vaultConfigKV(vault *api.Client, kv []kvItem) error {
 	for _, item := range kv {
 		switch item.Type {
 		case "kv":
-			//TODO retry with backoff
-			_, err := vault.Logical().Write(item.Path, item.Data)
+			var err error
+			var exp backoff.Exponential
+			for exp.Retries() < 10 {
+				_, err := vault.Logical().Write(item.Path, item.Data)
+				if err == nil {
+					break
+				}
+			}
 			if err != nil {
 				return err //TODO add path to err?
 			}

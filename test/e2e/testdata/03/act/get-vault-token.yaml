@@ -1,4 +1,5 @@
 type: getSecret
 namespace: {{ .Values.namespace }}
 name: vault-unseal-keys
+postCondition: gt (len (index .data "vault-root")) 10
 

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/go-autorest/autorest"
+	"github.com/mmlt/kubectl-tmplt/pkg/util/backoff"
+	"time"
 
 	//"github.com/Azure/azure-sdk-for-go/services/keyvault/auth"
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -57,6 +59,7 @@ type KV struct {
 	url    string
 }
 
+// GetAuthorizerFrom returns an authorizer from VAULT_* key-value pairs.
 func getAuthorizerFrom(values map[string]string) (autorest.Authorizer, error) {
 	s, err := getSettingsFrom(values)
 	if err != nil {
@@ -96,12 +99,17 @@ func (k KV) Get(key, field string) string {
 	return fmt.Sprintf("no field %s in secret %s", field, key)
 }
 
+// Get gets a KeyVault secret by name.
 func (k KV) get(name string) (string, error) {
-	res, err := k.client.GetSecret(context.Background(), k.url, name, "")
-	if err != nil {
-		return "", fmt.Errorf("no secret %s: %w", name, err)
+	var err error
+	for exp := backoff.NewExponential(10 * time.Second); exp.Retries() < 10; exp.Sleep() {
+		r, e := k.client.GetSecret(context.Background(), k.url, name, "")
+		if e == nil {
+			return *r.Value, nil
+		}
+		err = e
 	}
-	return *res.Value, nil
+	return "", fmt.Errorf("no secret %s: %w", name, err)
 }
 
 func getSettingsFrom(values map[string]string) (*auth.EnvironmentSettings, error) {

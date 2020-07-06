@@ -6,6 +6,7 @@ import (
 	"flag"
 	"github.com/mmlt/kubectl-tmplt/pkg/execute"
 	"github.com/mmlt/kubectl-tmplt/pkg/tool"
+	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"k8s.io/klog/klogr"
@@ -21,7 +22,12 @@ Valid values:
     keyvault - An Azure KeyVault is configured in keyvault/. The KeyVault contains the same secrets as those in filevault/
 `)
 
-func available(required string) bool {
+const (
+	resourceK8s      = "k8s"
+	resourceKeyVault = "keyvault"
+)
+
+func hasResources(required string) bool {
 	for _, req := range strings.Split(required, ",") {
 		if !strings.Contains(*resources, req) {
 			return false
@@ -39,6 +45,8 @@ func TestGenerate(t *testing.T) {
 	var tests = []struct {
 		// it describes what the test proves.
 		it string
+		// setValues override all other values.
+		setValues yamlx.Values
 		// subject is what is tested.
 		subject tool.Tool
 		// resources is a comma separated list of the required external resources to run a test
@@ -47,9 +55,9 @@ func TestGenerate(t *testing.T) {
 		{
 			it: "should_generate_output_for_the_example_template",
 			subject: tool.Tool{
-				Environ:     []string{},
-				JobFilepath: "testdata/00/job.yaml",
-				SetFilepath: "testdata/00/values.yaml",
+				Environ:       []string{},
+				JobFilepath:   "testdata/00/job.yaml",
+				ValueFilepath: "testdata/00/values.yaml",
 				//TODO Mode: tool.ModeGenerate,
 				Execute: &execute.Execute{
 					Kubectl: execute.Kubectl{
@@ -64,9 +72,9 @@ func TestGenerate(t *testing.T) {
 		{
 			it: "should_generate_output_for_simple_cluster_config",
 			subject: tool.Tool{
-				Environ:     []string{},
-				JobFilepath: "testdata/01/cluster/example-job.yaml",
-				SetFilepath: "testdata/01/cluster/values.yaml",
+				Environ:       []string{},
+				JobFilepath:   "testdata/01/cluster/example-job.yaml",
+				ValueFilepath: "testdata/01/cluster/values.yaml",
 				Execute: &execute.Execute{
 					Kubectl: execute.Kubectl{
 						Log: log,
@@ -80,9 +88,10 @@ func TestGenerate(t *testing.T) {
 		{
 			it: "should_generate_output_for_all_step_and_action_types",
 			subject: tool.Tool{
-				Environ:     []string{},
-				JobFilepath: "testdata/03/job.yaml",
-				SetFilepath: "testdata/03/values.yaml",
+				Environ:       []string{},
+				Mode:          tool.ModeGenerateWithActions,
+				JobFilepath:   "testdata/03/job.yaml",
+				ValueFilepath: "testdata/03/values.yaml",
 				Execute: &execute.Execute{
 					Kubectl: execute.Kubectl{
 						Log: log,
@@ -124,20 +133,20 @@ func TestGenerate(t *testing.T) {
 				},
 				Log: log,
 			},
-			resources: "keyvault",
+			resources: resourceKeyVault,
 		},
 	}
 
 	for _, tst := range tests {
 		t.Run(tst.it, func(t *testing.T) {
-			if !available(tst.resources) {
-				t.Skip("not all resource are available:", tst.resources)
+			if !hasResources(tst.resources) {
+				t.Skip("this test requires resource(s) (check --resources flag):", tst.resources)
 				return
 			}
 
 			got.Reset()
 
-			err := tst.subject.Run()
+			err := tst.subject.Run(tst.setValues)
 			if assert.NoError(t, err) {
 				// read golden file to compare got output with
 				p := filepath.Join("testdata/golden", tst.it)

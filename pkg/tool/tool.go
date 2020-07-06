@@ -27,9 +27,9 @@ type Tool struct {
 	Environ []string
 	// JobFilepath refers to a yaml format file with 'steps' and 'defaults' fields.
 	JobFilepath string
-	// SetFilepath refers to a yaml format file with key-values.
+	// ValueFilepath refers to a yaml format file with key-values.
 	// These values override job defaults and template values.
-	SetFilepath string
+	ValueFilepath string
 	// VaultPath refers to a directory containing files;
 	//	type - Type of vault to read from, valid values are: azure-key-vault | file
 	//	url - URL of Vault
@@ -56,9 +56,9 @@ const (
 	// ModeUnknown means no Mode has been specified.
 	ModeUnknown Mode = 0
 
-	// ModeGenerate generates templates and writes them to stdout instead of applying them.
+	// ModeGenerate generates templates and writes them to out instead of applying them.
 	ModeGenerate Mode = 1 << iota
-	// ModeGenerateWithActions generates templates and actions and writes them to stdout instead of applying them.
+	// ModeGenerateWithActions generates templates and actions and writes them to out instead of applying them.
 	ModeGenerateWithActions = ModeGenerate | ModeActions
 
 	// ModeApply generates and applies templates to the target cluster but doesn't perform actions.
@@ -109,7 +109,7 @@ func ModeFromString(arg string) (Mode, error) {
 }
 
 // Run runs the Tool.
-func (t *Tool) Run() error {
+func (t *Tool) Run(values yamlx.Values) error {
 	// create function to read template file content.
 	t.readFileFn = func(path string) (string, []byte, error) {
 		p := filepath.Join(filepath.Dir(t.JobFilepath), path)
@@ -126,8 +126,8 @@ func (t *Tool) Run() error {
 
 	// get global values.
 	gb := []byte{}
-	if t.SetFilepath != "" {
-		gb, err = ioutil.ReadFile(t.SetFilepath)
+	if t.ValueFilepath != "" {
+		gb, err = ioutil.ReadFile(t.ValueFilepath)
 		if err != nil {
 			return fmt.Errorf("set file: %w", err)
 		}
@@ -139,17 +139,21 @@ func (t *Tool) Run() error {
 		return fmt.Errorf("job file: %w", err)
 	}
 
-	return t.run(gb, jb)
+	return t.run(values, gb, jb)
 }
 
 // Run performs all steps in the job.
-func (t *Tool) run(values, job []byte) error {
+func (t *Tool) run(setValues yamlx.Values, values, job []byte) error {
+	// read values and merge with setValues into globalValues.
 	var globalValues yamlx.Values
 	err := yaml2.Unmarshal(values, &globalValues)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", t.SetFilepath, err)
+		return fmt.Errorf("parse %s: %w", t.ValueFilepath, err)
 	}
 
+	globalValues = yamlx.Merge(globalValues, setValues)
+
+	// job.
 	j := &struct {
 		Steps    []yamlx.Values `yaml:"steps"`
 		Defaults yamlx.Values   `yaml:"defaults"`

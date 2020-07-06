@@ -9,11 +9,9 @@ Compared to Helm it;
 
 ## Quick Start
 
-Install:
-```
-kubectl krew install kubectl-tmplt # or download manually.
-kubectl tmplt --help
-```
+Download `kubectl-tmplt` from [releases](https://github.com/mmlt/kubectl-tmplt/releases) and put it in your PATH.
+Check `kubectl tmplt --help`
+
 
 Create a 'job.yaml' file:
 ```yaml
@@ -66,7 +64,6 @@ More examples in `test/e2e/testdata/`
 
 
 ## Wishlist
-- set-value flag
 - add label (also needed for prune)
 - prune
 - kustomize step

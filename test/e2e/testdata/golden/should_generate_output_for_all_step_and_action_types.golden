@@ -521,6 +521,7 @@ spec:
 # type: getSecret
 # namespace: kt-test
 # name: vault-unseal-keys
+# postCondition: gt (len (index .data "vault-root")) 10
 # 
 ---
 ##07: InstrAction [portForward -n kt-test pod/vault-0 8200] set-vault-kv.yaml

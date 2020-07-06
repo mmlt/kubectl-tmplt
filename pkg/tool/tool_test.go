@@ -14,14 +14,17 @@ import (
 func TestTool(t *testing.T) {
 	tests := []struct {
 		it           string
-		globalValues string
+		mode         Mode
 		job          string
+		setValues    yamlx.Values
+		globalValues string
 		templates    map[string]string
 		vault        getter
 		want         *fakeDoer
 	}{
 		{
-			it: "should_apply_one_doc_with_tmplt_scoped_values",
+			it:   "should_apply_one_doc_with_tmplt_scoped_values",
+			mode: ModeGenerate,
 			job: `
 steps:
 - tmplt: tpl/example.txt
@@ -39,10 +42,8 @@ steps:
 		},
 
 		{
-			it: "should_apply_one_doc_with_global_and_tmplt_scoped_values",
-			globalValues: `
-audience: world
-`,
+			it:   "should_apply_one_doc_with_global_and_tmplt_scoped_values",
+			mode: ModeGenerate,
 			job: `
 steps:
 - tmplt: tpl/example.txt
@@ -53,12 +54,38 @@ defaults:
   audience: all
   team:
     lead: klukkluk`,
+			globalValues: `
+audience: world
+`,
 			templates: map[string]string{
 				"tpl/example.txt": `
 {{ .Values.team.lead }} says hello {{ .Values.audience }}!`,
 			},
 			want: &fakeDoer{
 				apply: []string{"\npipo says hello world!"},
+			},
+		},
+
+		{
+			it:   "should_apply_one_doc_with_setvalue_overriding_all_others",
+			mode: ModeGenerate,
+			job: `
+steps:
+- tmplt: tpl/example.txt
+  values:
+    name: pipo
+defaults:
+  name: klukkluk`,
+			setValues: yamlx.Values{"name": "dikkedeur"},
+			globalValues: `
+name: mamaloe
+`,
+			templates: map[string]string{
+				"tpl/example.txt": `
+{{ .Values.name }}`,
+			},
+			want: &fakeDoer{
+				apply: []string{"\ndikkedeur"},
 			},
 		},
 
@@ -73,19 +100,21 @@ steps:
 		},
 
 		{
-			it: "should_handle_action_with_portforward_arg",
+			it:   "should_handle_action_with_portforward_arg",
+			mode: ModeGenerateWithActions,
 			job: `
 steps:
 - action: action/get.txt
   portForward: --forward-flags
   values:
-    action: getSecret`,
+    type: getSecret`,
 			templates: map[string]string{
 				"action/get.txt": `
-action: {{ .Values.action }}`,
+type: {{ .Values.type }}`,
 			},
+
 			want: &fakeDoer{
-				action:       []string{"\naction: getSecret"},
+				action:       []string{"\ntype: getSecret"},
 				portForward:  []string{"--forward-flags"},
 				passedValues: yamlx.Values{},
 				actionTally:  1,
@@ -93,7 +122,8 @@ action: {{ .Values.action }}`,
 		},
 
 		{
-			it: "should_handle_action_with_passed_values",
+			it:   "should_handle_action_with_passed_values",
+			mode: ModeGenerateWithActions,
 			job: `
 steps:
 - action: action/nop.txt
@@ -113,7 +143,8 @@ tally: {{ .Get.tally }}`,
 		},
 
 		{
-			it: "should_handle_reads_from_vault",
+			it:   "should_handle_reads_from_vault",
+			mode: ModeGenerateWithActions,
 			job: `
 steps:
 - tmplt: tpl/vault.txt`,
@@ -144,20 +175,22 @@ secret: {{ vault "object" "field" }}`,
 			m := &fakeDoer{}
 
 			tl := Tool{
+				Mode:       tst.mode,
 				Environ:    []string{},
 				Execute:    m,
 				readFileFn: readFile,
 				vault:      tst.vault,
 			}
 
-			err := tl.run([]byte(tst.globalValues), []byte(tst.job))
-			assert.NoError(t, err)
-			assert.Equal(t, tst.want, m)
+			err := tl.run(tst.setValues, []byte(tst.globalValues), []byte(tst.job))
+			if assert.NoError(t, err) {
+				assert.Equal(t, tst.want, m)
+			}
 		})
 	}
 }
 
-//
+// FakeDoer records calls and provides return values.
 type fakeDoer struct {
 	wait         []string
 	apply        []string
@@ -192,7 +225,7 @@ func (m *fakeDoer) Action(id int, name string, doc []byte, portForward string, p
 	return nil
 }
 
-//
+// FakeVault provides a map based vault.
 type fakeVault map[string]string
 
 var _ getter = fakeVault{}

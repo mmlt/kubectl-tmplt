@@ -13,12 +13,14 @@ install-tools:
 generate:
 	go generate ./pkg/...
 
-# Run tests.
+# Run unit tests.
 test: check
 	go test ./pkg/... ./cmd/... -coverprofile test.cover
 
+# Run e2e tests.
+# Tests that require resouces that are not in --resources are skipped.
 teste2e: check
-	go test ./test/e2e/... -coverprofile e2e.cover
+	go test -v ./test/e2e/... -coverprofile e2e.cover -args --resources=k8s,keyvault
 
 # Create binaries.
 bin: check

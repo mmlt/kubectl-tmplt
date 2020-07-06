@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-logr/logr"
+	"github.com/mmlt/kubectl-tmplt/pkg/util/backoff"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	yaml2 "gopkg.in/yaml.v2"
 	"io"
@@ -55,17 +56,13 @@ func (x *Execute) Wait(id int, flags string) error {
 
 	var stdout string
 	var err error
-	var exp exponential
 	end := time.Now().Add(10 * time.Minute) // TODO Make time configurable via flag or env?
-	for !time.Now().After(end) {
+	for exp := backoff.NewExponential(10 * time.Second); !time.Now().After(end); exp.Sleep() {
 		stdout, _, err = x.Kubectl.Run(nil, "", args...)
 		if strings.Contains(stdout, "condition met") {
 			break
 		}
-		exp.Sleep(10 * time.Second)
 	}
-	//TODO error on timeout condition?
-
 	if err != nil {
 		return fmt.Errorf("##%d tpl %s: %w", id, "name", err) //TODO should be more imformative then 'name'
 	}
@@ -157,22 +154,4 @@ func (x *Execute) log(id, tpl, step, txt string) {
 		"id", id,
 		"txt", strings.TrimSuffix(txt, "\n"),
 		"tpl", tpl)
-}
-
-// Exponential Sleep
-type exponential int64
-
-// Sleep exponentially longer on each invocation with a limit of max time.
-func (ex *exponential) Sleep(max time.Duration) {
-	if *ex == 0 {
-		*ex = 1
-	}
-	d := int64(*ex) * 100 * time.Millisecond.Nanoseconds()
-	if d > max.Nanoseconds() {
-		d = max.Nanoseconds()
-	} else {
-		*ex <<= 1
-	}
-
-	time.Sleep(time.Duration(d))
 }

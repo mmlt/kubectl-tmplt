@@ -5,8 +5,10 @@ import (
 	"github.com/mmlt/kubectl-tmplt/pkg/execute"
 	"github.com/mmlt/kubectl-tmplt/pkg/tool"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/exe/kubectl"
+	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/klog/klogr"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -19,6 +21,8 @@ func TestApply(t *testing.T) {
 	var tests = []struct {
 		// it describes what the test proves.
 		it string
+		// setValues override all other values.
+		setValues yamlx.Values
 		// setup are the kubectl commands to prepare the target cluster for the test.
 		setup []string
 		// subject is what is tested.
@@ -39,10 +43,11 @@ func TestApply(t *testing.T) {
 				"-n kt-test delete secret vault-unseal-keys --wait",
 			},
 			subject: tool.Tool{
-				Environ:     []string{},
-				JobFilepath: "testdata/03/job.yaml",
-				SetFilepath: "testdata/03/values.yaml",
-				VaultPath:   "testdata/filevault",
+				Mode:          tool.ModeApplyWithActions,
+				Environ:       []string{},
+				JobFilepath:   "testdata/03/job.yaml",
+				ValueFilepath: "testdata/03/values.yaml",
+				VaultPath:     "testdata/filevault",
 				Execute: &execute.Execute{
 					//TODO why is env needed? Environ:        []string{},
 					Kubectl: execute.Kubectl{
@@ -58,27 +63,34 @@ func TestApply(t *testing.T) {
 			postConditions: []string{
 				//"wait pod -l app=example --for condition=Ready",
 			},
-			resources: "k8s",
+			resources: resourceK8s,
 		},
 	}
 
 	// prevent taking down a real cluster by accident.
 	out, _, err := kubectl.Run(nil, log, &kubectl.Opt{}, "", "config", "current-context")
 	assert.NoError(t, err)
-	assert.Regexp(t, "minikube|microk8s|local", out, "current-context must refer to a local cluster")
+	k8sLocal := regexp.MustCompile("minikube|microk8s|local").MatchString(out)
+	/*
+		if !assert.Regexp(t, "minikube|microk8s|local", out, "current-context must refer to a local cluster") {
+			t.Skip("")
+		}*/
 
 	for _, tst := range tests {
 		t.Run(tst.it, func(t *testing.T) {
-			if !available(tst.resources) {
-				t.Skip("not all resource are available:", tst.resources)
+			if !hasResources(tst.resources) {
+				t.Skip("this test requires resource(s) (check --resources flag):", tst.resources)
 				return
+			}
+			if strings.Contains(tst.resources, resourceK8s) && !k8sLocal {
+				t.Skip("as a precaution tests run against a local k8s cluster")
 			}
 
 			// clean
 			setup(t, tst.setup, log)
 
 			// run
-			err = tst.subject.Run()
+			err = tst.subject.Run(tst.setValues)
 			assert.NoError(t, err)
 
 			// check conditions.
