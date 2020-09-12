@@ -1,0 +1,3 @@
+primordial:
+  name: "{{ .Values.name }}"
+  offspring: "{{ .Values.offspring }}"

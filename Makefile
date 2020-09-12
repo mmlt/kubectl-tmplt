@@ -1,6 +1,6 @@
 .PHONY: all install-tools generate test bin check
 
-VERSION?=v0.2.0
+VERSION?=v0.3.0
 
 # CI/CD target.
 all: install-tools generate bin

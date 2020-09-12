@@ -234,7 +234,7 @@ A getSecret template contains the following arguments;
 
 
 TEMPLATING
-Templating uses 'https://golang.org/pkg/text/template/' with addtional functions:
+Templating uses 'https://golang.org/pkg/text/template/' with additional functions:
     http://masterminds.github.io/sprig/
     toToml, to/fromYaml, to/fromJson - convert between string and object form
 	vault path/to/object field - read a value from master vault (also see MASTER VAULT)
@@ -272,4 +272,19 @@ For example a secret named 'xyz' with value '{"name":"superman"}'
     {{ vault "xyz" "name" }} expands to superman
     {{ vault "xyz" "" }} expands to {"name":"superman"}
 NB. JSON is valid YAML
+
+
+EXPERIMENTAL
+v0.3.0 allows for job files to contain templated values, for example:
+	steps:
+	- tmplt: tpl/example.txt
+	  values:
+		text: "{{ .Values.first }} {{ .Values.second }}"
+	defaults:
+	  first: hello
+	  second: world
+results in .Values.text="hello world" being passed to the template.
+Caveats:
+- The job file is parsed before expansion therefore {{ }} need to be wrapped in double quotes to have (arguably) valid yaml.
+- There is currently no easy way to see the content of the job file after expansion.
 `

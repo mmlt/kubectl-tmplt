@@ -1,0 +1,5 @@
+---
+##01.01: InstrApply [apply -f -] template.yaml
+primordial:
+  name: "Chaos"
+  offspring: "Erebos,Nyx,Aether,Hemera"

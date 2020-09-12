@@ -1,0 +1,12 @@
+steps:
+  - tmplt: "template.yaml"
+    values:
+      name: "Chaos"
+      offspring: "{{ .Values.p1 }},{{ .Values.p2 }},{{ .Values.p3 }},{{ .Values.p4 }}"
+
+
+defaults:
+  p1: "Erebos"
+  p2: "Nyx"
+  p3: "Aether"
+  p4: "Hemera"

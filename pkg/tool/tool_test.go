@@ -159,6 +159,25 @@ secret: {{ vault "object" "field" }}`,
 				apply: []string{"\nsecret: value"},
 			},
 		},
+
+		{
+			it:   "should_expand_variables_in_job",
+			mode: ModeGenerate,
+			job: `
+steps:
+- tmplt: tpl/example.txt
+  values:
+    text: "{{ .Values.first }}" # note the quotes to make this valid yaml (arguably)
+defaults:
+  first: "hello"
+`,
+			templates: map[string]string{
+				"tpl/example.txt": `text={{ .Values.text }}`,
+			},
+			want: &fakeDoer{
+				apply: []string{"text=hello"},
+			},
+		},
 	}
 
 	for _, tst := range tests {

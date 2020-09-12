@@ -16,10 +16,12 @@ import (
 )
 
 // Resources is a list of external resources that are available for tests.
+// Tests that require resources that are not listed in --resources are skipped.
 var resources = flag.String("resources", "", `A comma separated list of external resources available to tests.
 Valid values: 
     k8s - A local Kubernetes cluster (addressed by kube/config current-context)
-    keyvault - An Azure KeyVault is configured in keyvault/. The KeyVault contains the same secrets as those in filevault/
+    keyvault - An Azure KeyVault is configured in keyvault/. with the same secrets as those in filevault/ 
+		(The Key Vault must be accessible for the user running the test.)
 `)
 
 const (
@@ -134,6 +136,22 @@ func TestGenerate(t *testing.T) {
 				Log: log,
 			},
 			resources: resourceKeyVault,
+		},
+		{
+			it: "should_expand_variables_in_job",
+			subject: tool.Tool{
+				Environ:       []string{},
+				JobFilepath:   "testdata/04/job.yaml",
+				ValueFilepath: "testdata/04/values.yaml",
+				Execute: &execute.Execute{
+					Kubectl: execute.Kubectl{
+						Log: log,
+					},
+					Out: &got,
+					Log: log,
+				},
+				Log: log,
+			},
 		},
 	}
 

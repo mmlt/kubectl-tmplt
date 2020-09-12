@@ -124,6 +124,8 @@ func (t *Tool) Run(values yamlx.Values) error {
 	}
 	t.vault = v
 
+	// TODO check if vault is accessible
+
 	// get global values.
 	gb := []byte{}
 	if t.ValueFilepath != "" {
@@ -153,15 +155,31 @@ func (t *Tool) run(setValues yamlx.Values, values, job []byte) error {
 
 	globalValues = yamlx.Merge(globalValues, setValues)
 
-	// job.
+	// process job.
+
 	j := &struct {
 		Steps    []yamlx.Values `yaml:"steps"`
 		Defaults yamlx.Values   `yaml:"defaults"`
 	}{}
 
+	// read job defaults
 	err = yaml2.Unmarshal(job, j)
 	if err != nil {
 		return fmt.Errorf("j file %s: %w", t.JobFilepath, err)
+	}
+
+	// expand job with its own defaults and globalValues
+	jv := yamlx.Merge(j.Defaults, globalValues)
+
+	b, err := expand.Run(t.Environ, t.JobFilepath, job, jv, nil, t.tmpltFunctions())
+	if err != nil {
+		return fmt.Errorf("expand %s: %w", t.JobFilepath, err)
+	}
+
+	// unmarshall expanded job.
+	err = yaml2.Unmarshal(b, j)
+	if err != nil {
+		return fmt.Errorf("j file %s (after expand): %w", t.JobFilepath, err)
 	}
 
 	// passedValues may be set by a step and read by a next step.

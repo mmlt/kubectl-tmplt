@@ -12,7 +12,7 @@ require (
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible
-	github.com/Masterminds/sprig/v3 v3.1.0 // indirect
+	github.com/Masterminds/sprig/v3 v3.1.0
 	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/stdr v0.0.0-20190808155957-db4f46c40425
 	github.com/google/uuid v1.1.2 // indirect
