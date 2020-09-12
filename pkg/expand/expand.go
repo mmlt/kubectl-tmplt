@@ -3,7 +3,7 @@ package expand
 import (
 	"bytes"
 	"fmt"
-	"github.com/Masterminds/sprig"
+	sprig "github.com/Masterminds/sprig/v3"
 	"github.com/mmlt/kubectl-tmplt/pkg/expand/files"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	"path/filepath"
