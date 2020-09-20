@@ -4,6 +4,8 @@ steps:
   values:
     name: example
     opaExcluded: true
+    loadbalancer:
+      in: "*"
 
 - tmplt: ../tpl/ingress-nginx-shared.yaml
 

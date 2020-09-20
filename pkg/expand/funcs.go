@@ -7,10 +7,11 @@ import (
 
 // IndexOrDefault returns the index value or the default value if indexing fails.
 // Also see https://golang.org/pkg/text/template/ index function.
-func indexOrDefault(defaul reflect.Value, item reflect.Value, indexes ...reflect.Value) (reflect.Value, error) {
+func indexOrDefault(def reflect.Value, item reflect.Value, indexes ...reflect.Value) (reflect.Value, error) {
 	v, err := index(item, indexes...)
-	if err != nil {
-		return defaul, nil
+	if err != nil || v.IsNil() {
+		// index() doesn't error but v == nil when item is nil and no indexes are given (using Option("missingkey=invalid")).
+		return def, nil
 	}
 	return v, nil
 }

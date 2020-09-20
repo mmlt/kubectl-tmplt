@@ -236,6 +236,7 @@ A getSecret template contains the following arguments;
 TEMPLATING
 Templating uses 'https://golang.org/pkg/text/template/' with additional functions:
     http://masterminds.github.io/sprig/
+    indexOrDefault - like text/template 'index' function but takes a default value as first argument.
     toToml, to/fromYaml, to/fromJson - convert between string and object form
 	vault path/to/object field - read a value from master vault (also see MASTER VAULT)
 
@@ -251,6 +252,8 @@ Templating examples:
     {{ (.Files.Glob "secrets/*").AsSecrets }}
 
     {{ vault "secretname" "fieldname" }}
+
+    {{ indexOrDefault "not found" .Values "path" "to" "elem" }}
 
 Beware, file access is not sanitized!
 
