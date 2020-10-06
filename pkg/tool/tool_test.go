@@ -2,6 +2,7 @@ package tool
 
 import (
 	"fmt"
+	"github.com/mmlt/kubectl-tmplt/pkg/execute"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	"github.com/stretchr/testify/assert"
 	"path"
@@ -226,9 +227,13 @@ func (m *fakeDoer) Wait(id int, flags string) error {
 	return nil
 }
 
-func (m *fakeDoer) Apply(id int, name string, doc []byte) error {
+func (m *fakeDoer) Apply(id int, name string, labels map[string]string, doc []byte) ([]execute.KindNamespaceName, error) {
 	m.apply = append(m.apply, string(doc))
-	return nil
+	return nil /*TODO*/, nil
+}
+
+func (m *fakeDoer) Prune(id int, deployed []execute.KindNamespaceName, labels map[string]string, namespaces []string) error {
+	panic("implement me") //TODO
 }
 
 func (m *fakeDoer) Action(id int, name string, doc []byte, portForward string, passedValues *yamlx.Values) error {

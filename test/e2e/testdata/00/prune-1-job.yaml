@@ -1,0 +1,20 @@
+prune:
+  labels:
+    gitops.example.com/repo: testdata-00
+  namespaces:
+    - ""
+    - ns1
+    - ns2
+
+steps:
+  - tmplt: "namespace.yaml"
+    values:
+      name: "ns1"
+  - tmplt: "template.yaml"
+    values:
+      name: "test"
+      namespace: "ns1"
+  - wait: -n ns1 --for condition=Ready pod -l app=example
+
+#defaults:
+#  namespace: "default"

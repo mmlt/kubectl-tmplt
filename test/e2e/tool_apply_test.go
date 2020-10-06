@@ -26,55 +26,101 @@ func TestApply(t *testing.T) {
 		// setup are the kubectl commands to prepare the target cluster for the test.
 		setup []string
 		// subject is what is tested.
-		subject tool.Tool
+		subjects []tool.Tool
 		// postConditions that should be met upon completion.
 		// See kubectl wait.
 		postConditions []string
 		// resources is a comma separated list of the required external resources to run a test
 		resources string
 	}{
-		{
-			it: "should_deploy_and_configure_vault_with_values_from_filevault",
-			setup: []string{
-				// test with a freshly created Vault (beware; deleting and recreating vault takes minutes)
-				"-n kt-test delete vault vault",
-				"-n kt-test wait --for=delete pod/vault-0",
-				"-n kt-test delete pvc vault-file --wait",
-				"-n kt-test delete secret vault-unseal-keys --wait",
-			},
-			subject: tool.Tool{
-				Mode:          tool.ModeApplyWithActions,
-				Environ:       []string{},
-				JobFilepath:   "testdata/03/job.yaml",
-				ValueFilepath: "testdata/03/values.yaml",
-				VaultPath:     "testdata/filevault",
-				Execute: &execute.Execute{
-					//TODO why is env needed? Environ:        []string{},
-					Kubectl: execute.Kubectl{
-						//TODO nil means use parent env
-						//Environ:     []string{},
+		/*		{
+				it: "should_deploy_and_configure_vault_with_values_from_filevault",
+				setup: []string{
+					// test with a freshly created Vault (beware; deleting and recreating vault takes minutes)
+					"-n kt-test delete vault vault",
+					"-n kt-test wait --for=delete pod/vault-0",
+					"-n kt-test delete pvc vault-file --wait",
+					"-n kt-test delete secret vault-unseal-keys --wait",
+				},
+				subjects: []tool.Tool{
+					tool.Tool{
+						Mode:          tool.ModeApplyWithActions,
+						Environ:       []string{},
+						JobFilepath:   "testdata/03/job.yaml",
+						ValueFilepath: "testdata/03/values.yaml",
+						VaultPath:     "testdata/filevault",
+						Execute: &execute.Execute{
+							//TODO why is env needed? Environ:        []string{},
+							Kubectl: execute.Kubectl{
+								//TODO nil means use parent env
+								//Environ:     []string{},
+								Log: log,
+							},
+							//Out:            nil,
+							Log: log,
+						},
 						Log: log,
 					},
-					//Out:            nil,
+				},
+				postConditions: []string{
+					//"wait pod -l app=example --for condition=Ready",
+				},
+				resources: resourceK8s,
+			},*/
+		{
+			it:    "should_deploy_a_pod_in_ns1_and_then_rename_the_namespace_to_ns2_causing_ns1_to_be_pruned",
+			setup: []string{
+				//TODO enable again "delete namespace ns1 ns2",
+			},
+			subjects: []tool.Tool{
+				tool.Tool{
+					Mode:          tool.ModeApply,
+					Environ:       []string{},
+					JobFilepath:   "testdata/00/prune-1-job.yaml",
+					ValueFilepath: "testdata/00/values.yaml",
+					//VaultPath:     "testdata/filevault",
+					Execute: &execute.Execute{
+						//TODO why is env needed? Environ:        []string{},
+						Kubectl: execute.Kubectl{
+							//TODO nil means use parent env
+							//Environ:     []string{},
+							Log: log,
+						},
+						//Out:            nil,
+						Log: log,
+					},
 					Log: log,
 				},
-				Log: log,
+				tool.Tool{
+					Mode:          tool.ModeApply,
+					Environ:       []string{},
+					JobFilepath:   "testdata/00/prune-2-job.yaml",
+					ValueFilepath: "testdata/00/values.yaml",
+					//VaultPath:     "testdata/filevault",
+					Execute: &execute.Execute{
+						//TODO why is env needed? Environ:        []string{},
+						Kubectl: execute.Kubectl{
+							//TODO nil means use parent env
+							//Environ:     []string{},
+							Log: log,
+						},
+						//Out:            nil,
+						Log: log,
+					},
+					Log: log,
+				},
 			},
 			postConditions: []string{
-				//"wait pod -l app=example --for condition=Ready",
+				//TODO turn into assertions "wait pod -l app=example --for condition=Ready",
 			},
 			resources: resourceK8s,
 		},
 	}
 
-	// prevent taking down a real cluster by accident.
+	// check if kubectl current-context refers to a local cluster.
 	out, _, err := kubectl.Run(nil, log, &kubectl.Opt{}, "", "config", "current-context")
 	assert.NoError(t, err)
 	k8sLocal := regexp.MustCompile("minikube|microk8s|local").MatchString(out)
-	/*
-		if !assert.Regexp(t, "minikube|microk8s|local", out, "current-context must refer to a local cluster") {
-			t.Skip("")
-		}*/
 
 	for _, tst := range tests {
 		t.Run(tst.it, func(t *testing.T) {
@@ -83,15 +129,17 @@ func TestApply(t *testing.T) {
 				return
 			}
 			if strings.Contains(tst.resources, resourceK8s) && !k8sLocal {
-				t.Skip("as a precaution tests run against a local k8s cluster")
+				t.Skip("not a local k8s cluster")
 			}
 
 			// clean
 			setup(t, tst.setup, log)
 
 			// run
-			err = tst.subject.Run(tst.setValues)
-			assert.NoError(t, err)
+			for _, subject := range tst.subjects {
+				err = subject.Run(tst.setValues)
+				assert.NoError(t, err)
+			}
 
 			// check conditions.
 			for _, cmd := range tst.postConditions {
@@ -111,9 +159,13 @@ func setup(t *testing.T, cmds []string, log logr.Logger) {
 	for _, cmd := range cmds {
 		cmd := strings.Split(cmd, " ")
 		_, _, err := kubectl.Run(nil, log, nil, "", cmd...)
-		if err == nil || strings.Contains(err.Error(), "Error from server (NotFound):") {
+		if err == nil || allowedError(err) {
 			continue
 		}
 		assert.NoError(t, err)
 	}
+}
+
+func allowedError(err error) bool {
+	return strings.Contains(err.Error(), "Error from server (NotFound):")
 }

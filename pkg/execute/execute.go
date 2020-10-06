@@ -131,8 +131,13 @@ func (x *Execute) Apply(id int, name string, labels map[string]string, b []byte)
 func (x *Execute) Prune(id int, deployed []KindNamespaceName, labels map[string]string, namespaces []string) error {
 	x.log("prune", id, 0, "", "query cluster")
 
+	apiResources, err := x.getK8sAPIResources()
+	if err != nil {
+		return err
+	}
+
 	// Get existing objects matching namespaces and labels.
-	cluster, err := x.getSelectedObjects(namespaces, labels)
+	cluster, err := x.getSelectedObjects(namespaces, labels, apiResources)
 	if err != nil {
 		return err
 	}
@@ -152,12 +157,16 @@ func (x *Execute) Prune(id int, deployed []KindNamespaceName, labels map[string]
 
 	// delete
 	for i, r := range toDelete {
-		args := []string{"delete", r.Resource(), r.Name}
+		rn, err := resource(r.GVK, apiResources)
+		if err != nil {
+			return err
+		}
+		args := []string{"delete", rn, r.Name}
 		if r.Namespace != "" {
 			args = append(args, "-n", r.Namespace)
 		}
 		x.log("prune", id, i+1, "", strings.Join(args, " "))
-		_, _, err := x.Kubectl.Run(nil, "", args...)
+		_, _, err = x.Kubectl.Run(nil, "", args...)
 		if err != nil {
 			return fmt.Errorf("delete: %w", err)
 		}
@@ -246,13 +255,13 @@ func updateObjectYaml(doc []byte, labels map[string]string) ([]byte, KindNamespa
 }
 
 // GetSelectedObjects returns all resources in the specified namespaces matching labels.
-func (x *Execute) getSelectedObjects(namespaces []string, labels map[string]string) ([]KindNamespaceName, error) {
-	apiResources, err := x.getK8sAPIResources()
-	if err != nil {
-		return nil, err
-	}
+func (x *Execute) getSelectedObjects(namespaces []string, labels map[string]string, apiResources []v1.APIResource) ([]KindNamespaceName, error) {
+	//apiResources, err := x.getK8sAPIResources()
+	//if err != nil {
+	//	return nil, err
+	//}
 
-	apiResources, err = filterAPIResources(apiResources)
+	apiResources, err := filterAPIResources(apiResources)
 	if err != nil {
 		return nil, err
 	}
@@ -321,20 +330,21 @@ func (x *Execute) getObjects(kind, namespace string, labels map[string]string) (
 	return r, nil
 }
 
+//TODO remove
 // DeleteObjects deletes all resources in list.
-func (x *Execute) deleteObjects(list []KindNamespaceName) error {
-	for _, r := range list {
-		args := []string{"delete", r.Resource(), r.Name}
-		if r.Namespace != "" {
-			args = append(args, "-n", r.Namespace)
-		}
-		_, _, err := x.Kubectl.Run(nil, "", args...)
-		if err != nil {
-			return fmt.Errorf("delete: %w", err)
-		}
-	}
-	return nil
-}
+//func (x *Execute) deleteObjects(list []KindNamespaceName) error {
+//	for _, r := range list {
+//		args := []string{"delete", r.Resource(), r.Name}
+//		if r.Namespace != "" {
+//			args = append(args, "-n", r.Namespace)
+//		}
+//		_, _, err := x.Kubectl.Run(nil, "", args...)
+//		if err != nil {
+//			return fmt.Errorf("delete: %w", err)
+//		}
+//	}
+//	return nil
+//}
 
 // JoinLabels returns a comma separated string with k=v pairs.
 func joinLabels(labels map[string]string) string {
@@ -373,12 +383,23 @@ func (k KindNamespaceName) String() string {
 }
 
 // Resource returns the name of the resource like; pod, configmap, xyz.constraints.gatekeeper.sh
+// TODO use APIResources to do mapping.
 func (k KindNamespaceName) Resource() string {
 	r := strings.ToLower(k.GVK.Kind)
 	if len(k.GVK.Group) > 0 {
 		r += "." + k.GVK.Group
 	}
 	return r
+}
+
+// Resource returns the name of the resource like; pod, configmap, xyz.constraints.gatekeeper.sh
+func resource(gvk v1.GroupVersionKind, resources []v1.APIResource) (string, error) {
+	for _, r := range resources {
+		if r.Kind == gvk.Kind && r.Group == gvk.Group {
+			return r.Name, nil
+		}
+	}
+	return "", fmt.Errorf("no api-resource for %s", gvk.String())
 }
 
 // Subtract returns a - b

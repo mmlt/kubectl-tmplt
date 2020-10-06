@@ -1,6 +1,6 @@
 .PHONY: all install-tools generate test bin check
 
-VERSION?=v0.3.1
+VERSION?=v0.4.0-alpha
 
 # CI/CD target.
 all: install-tools generate bin
@@ -19,6 +19,7 @@ test: check
 
 # Run e2e tests.
 # Tests that require resouces that are not in --resources are skipped.
+# See test/e2e/tool_generate_test.go for more on --resources flag.
 teste2e: check
 	go test -v ./test/e2e/... -coverprofile e2e.cover -args --resources=k8s,keyvault
 

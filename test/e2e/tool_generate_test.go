@@ -58,7 +58,7 @@ func TestGenerate(t *testing.T) {
 			it: "should_generate_output_for_the_example_template",
 			subject: tool.Tool{
 				Environ:       []string{},
-				JobFilepath:   "testdata/00/job.yaml",
+				JobFilepath:   "testdata/00/simple-job.yaml",
 				ValueFilepath: "testdata/00/values.yaml",
 				//TODO Mode: tool.ModeGenerate,
 				Execute: &execute.Execute{

@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/mitchellh/mapstructure"
 	"github.com/mmlt/kubectl-tmplt/pkg/azure"
+	"github.com/mmlt/kubectl-tmplt/pkg/execute"
 	"github.com/mmlt/kubectl-tmplt/pkg/expand"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	yaml2 "gopkg.in/yaml.v2"
@@ -81,7 +82,8 @@ const (
 // Executor provides methods to apply a step to the target cluster or write a textual representation to out.
 type Executor interface {
 	Wait(id int, flags string) error
-	Apply(id int, name string, doc []byte) error
+	Apply(id int, name string, labels map[string]string, doc []byte) ([]execute.KindNamespaceName, error)
+	Prune(id int, deployed []execute.KindNamespaceName, labels map[string]string, namespaces []string) error
 	Action(id int, name string, doc []byte, portForward string, passedValues *yamlx.Values) error
 }
 
@@ -124,7 +126,7 @@ func (t *Tool) Run(values yamlx.Values) error {
 	}
 	t.vault = v
 
-	// TODO check if vault is accessible
+	// TODO check if vault is accessible (if --mkv is specified)
 
 	// get global values.
 	gb := []byte{}
@@ -157,9 +159,19 @@ func (t *Tool) run(setValues yamlx.Values, values, job []byte) error {
 
 	// process job.
 
+	type Prune struct {
+		// Labels to add to all resource and query for existing resources.
+		Labels map[string]string `yaml:"labels"`
+		// Namespaces to consider during pruning.
+		// Add "" to prune non-namespaced resources.
+		Namespaces []string `yaml:"namespaces"`
+	}
 	j := &struct {
-		Steps    []yamlx.Values `yaml:"steps"`
-		Defaults yamlx.Values   `yaml:"defaults"`
+		Prune Prune `yaml:"prune"`
+		// steps to run.
+		Steps []yamlx.Values `yaml:"steps"`
+		// default values for steps.
+		Defaults yamlx.Values `yaml:"defaults"`
 	}{}
 
 	// read job defaults
@@ -182,12 +194,26 @@ func (t *Tool) run(setValues yamlx.Values, values, job []byte) error {
 		return fmt.Errorf("j file %s (after expand): %w", t.JobFilepath, err)
 	}
 
+	// the resources that are deployed to the cluster.
+	var deployedKNSNs []execute.KindNamespaceName
+
 	// passedValues may be set by a step and read by a next step.
 	passedValues := yamlx.Values{}
 
+	id := 1
+
 	// perform steps.
-	for id, stp := range j.Steps {
-		err = t.step(id, stp, j.Defaults, globalValues, &passedValues)
+	for _, stp := range j.Steps {
+		knsns, err := t.step(id, stp, j.Defaults, globalValues, j.Prune.Labels, &passedValues)
+		if err != nil {
+			return err
+		}
+		deployedKNSNs = append(deployedKNSNs, knsns...)
+		id++
+	}
+
+	if len(j.Prune.Labels) > 0 && len(j.Prune.Namespaces) > 0 {
+		err = t.Execute.Prune(id, deployedKNSNs, j.Prune.Labels, j.Prune.Namespaces)
 		if err != nil {
 			return err
 		}
@@ -197,33 +223,33 @@ func (t *Tool) run(setValues yamlx.Values, values, job []byte) error {
 }
 
 // Step performs a step.
-func (t *Tool) step(id int, stp, defaultValues, globalValues yamlx.Values, passedValues *yamlx.Values) error {
+func (t *Tool) step(id int, stp, defaultValues, globalValues yamlx.Values, labels map[string]string, passedValues *yamlx.Values) ([]execute.KindNamespaceName, error) {
 	s, err := decodeStep(stp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	st := typeOfStep(stp)
 	var tmpltPath string
 	switch st {
 	case TypeWait:
-		return t.Execute.Wait(id, s.W)
+		return nil, t.Execute.Wait(id, s.W)
 	case TypeTmplt:
 		tmpltPath = s.T
 	case TypeAction:
 		if t.Mode&ModeActions == 0 {
 			// stop before expanding action template because passedValues depends on a previous action.
-			return nil
+			return nil, nil
 		}
 		tmpltPath = s.A
 	default:
-		return fmt.Errorf("unknown step: %v", stp)
+		return nil, fmt.Errorf("unknown step: %v", stp)
 	}
 
 	// read template
 	p, b1, err := t.readFileFn(tmpltPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// expand template.
@@ -231,22 +257,24 @@ func (t *Tool) step(id int, stp, defaultValues, globalValues yamlx.Values, passe
 
 	b, err := expand.Run(t.Environ, p, b1, vs, *passedValues, t.tmpltFunctions())
 	if err != nil {
-		return fmt.Errorf("expand %s: %w", tmpltPath, err)
+		return nil, fmt.Errorf("expand %s: %w", tmpltPath, err)
 	}
+
+	var knsns []execute.KindNamespaceName //TODO wrong name and type
 
 	n := filepath.Base(tmpltPath)
 	switch st {
 	case TypeTmplt:
-		err = t.Execute.Apply(id, n, b)
+		knsns, err = t.Execute.Apply(id, n, labels, b)
 	case TypeAction:
 		err = t.Execute.Action(id, n, b, s.PortForward, passedValues)
 	}
 	if err != nil {
 		n := filepath.Base(tmpltPath)
-		return fmt.Errorf("tmplt %s: %w", n, err)
+		return nil, fmt.Errorf("tmplt %s: %w", n, err)
 	}
 
-	return nil
+	return knsns, nil
 }
 
 // TypeOfStep returns the step type from stp dynamic yaml.

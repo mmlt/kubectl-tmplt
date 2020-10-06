@@ -1,3 +1,9 @@
+prune:
+  labels:
+    gitops.example.com/repo: testdata-00
+  namespaces:
+    - default
+
 steps:
   - tmplt: "template.yaml"
     values:
