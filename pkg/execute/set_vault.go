@@ -3,11 +3,13 @@ package execute
 import (
 	"context"
 	"fmt"
+	"github.com/go-logr/logr"
 	"github.com/hashicorp/vault/api"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/backoff"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	"gopkg.in/yaml.v3"
 	"strings"
+	"time"
 )
 
 // SetVault is an Action to set configuration in a Vault in the target cluster.
@@ -21,15 +23,20 @@ func (x *Execute) setVault(id int, name string, doc []byte, portForward string, 
 
 	//TODO consider validation on URL Token containing "" and (CA=="" ICW tlsSkipVerify=="true")
 
-	if portForward != "" {
-		ctx, cancel := context.WithCancel(context.Background())
-		x.kubectlPortForward(ctx, portForward)
-		defer cancel()
-	}
-
 	vault, err := newVaultClient(av.URL, av.CA, av.TLSSkipVerify == "true", av.Token)
 	if err != nil {
 		return err
+	}
+
+	if portForward != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		x.kubectlPortForward(ctx, portForward)
+
+		x.waitForVaultUp(ctx, vault)
+		if ctx.Err() != nil {
+			return fmt.Errorf("waiting for Vault: %w", ctx.Err())
+		}
 	}
 
 	//err = vaultConfigPolicies(vault, av.Config.Policies)
@@ -37,7 +44,7 @@ func (x *Execute) setVault(id int, name string, doc []byte, portForward string, 
 	//	return err
 	//}
 
-	err = vaultConfigKV(vault, av.Config.KV)
+	err = x.vaultConfigKV(vault, av.Config.KV)
 	if err != nil {
 		return err
 	}
@@ -79,12 +86,23 @@ type kvItem struct {
 	Data map[string]interface{} `yaml:"data"`
 }
 
+// KubectlPortForward starts a port-forward until context cancel or timeout.
+// On error the kubectl port-forward is retried.
 func (x *Execute) kubectlPortForward(ctx context.Context, flags string) {
 	args := strings.Split(flags, " ")
 	args = append([]string{"port-forward"}, args...)
-	go func() {
-		_, _, _ = x.Kubectl.Run(ctx, "", args...) // error is logged
-	}()
+	go func(c context.Context, l logr.Logger, k Kubectler, a []string) {
+		exp := backoff.NewExponential(10 * time.Second)
+		for {
+			_, _, _ = k.Run(c, "", a...) // error is logged
+			if c.Err() != nil {
+				// context cancelled or timeout
+				return
+			}
+			exp.Sleep()
+			l.V(4).Info("retry port-forward")
+		}
+	}(ctx, x.Log, x.Kubectl, args)
 }
 
 // NewVaultClient returns a client to access Hashi Corp Vault.
@@ -103,24 +121,44 @@ func newVaultClient(url, ca string, insecure bool, token string) (*api.Client, e
 
 	clnt.SetToken(token)
 
+	//TODO configure client to retry
+	//clnt.SetBackoff()
+	//clnt.SetMaxRetries()
+
 	return clnt, nil
 }
 
-// VaultConfigKV writes kvItems to vault.
-func vaultConfigKV(vault *api.Client, kv []kvItem) error {
+func (x *Execute) waitForVaultUp(ctx context.Context, vault *api.Client) {
+	exp := backoff.NewExponential(10 * time.Second)
+	for {
+		h, err := vault.Sys().Health()
+		if err == nil && h.Initialized {
+			// success
+			return
+		}
+		exp.Sleep()
+		x.Log.V(4).Info("retry wait for Vault up")
+	}
+}
+
+// VaultConfigKV writes  KV items to vault.
+func (x *Execute) vaultConfigKV(vault *api.Client, kv []kvItem) error {
 	for _, item := range kv {
 		switch item.Type {
 		case "kv":
 			var err error
-			var exp backoff.Exponential
+			x.Log.V(4).Info("Vault write kv", "path", item.Path)
+			exp := backoff.NewExponential(10 * time.Second)
 			for exp.Retries() < 10 {
-				_, err := vault.Logical().Write(item.Path, item.Data)
+				_, err = vault.Logical().Write(item.Path, item.Data)
 				if err == nil {
 					break
 				}
+				exp.Sleep()
+				x.Log.V(4).Info("Vault write error, retrying", "error", err)
 			}
 			if err != nil {
-				return err //TODO add path to err?
+				return err
 			}
 		default:
 			return fmt.Errorf("expected type 'kv', got: %s", item.Type)
