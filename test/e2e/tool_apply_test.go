@@ -33,40 +33,40 @@ func TestApply(t *testing.T) {
 		// resources is a comma separated list of the required external resources to run a test
 		resources string
 	}{
-		/*		{
-				it: "should_deploy_and_configure_vault_with_values_from_filevault",
-				setup: []string{
-					// test with a freshly created Vault (beware; deleting and recreating vault takes minutes)
-					"-n kt-test delete vault vault",
-					"-n kt-test wait --for=delete pod/vault-0",
-					"-n kt-test delete pvc vault-file --wait",
-					"-n kt-test delete secret vault-unseal-keys --wait",
-				},
-				subjects: []tool.Tool{
-					tool.Tool{
-						Mode:          tool.ModeApplyWithActions,
-						Environ:       []string{},
-						JobFilepath:   "testdata/03/job.yaml",
-						ValueFilepath: "testdata/03/values.yaml",
-						VaultPath:     "testdata/filevault",
-						Execute: &execute.Execute{
-							//TODO why is env needed? Environ:        []string{},
-							Kubectl: execute.Kubectl{
-								//TODO nil means use parent env
-								//Environ:     []string{},
-								Log: log,
-							},
-							//Out:            nil,
+		{
+			it: "should_deploy_and_configure_vault_with_values_from_filevault",
+			setup: []string{
+				// test with a freshly created Vault (beware; deleting and recreating vault takes minutes)
+				"-n kt-test delete vault vault",
+				"-n kt-test wait --for=delete pod/vault-0",
+				"-n kt-test delete pvc vault-file --wait",
+				"-n kt-test delete secret vault-unseal-keys --wait",
+			},
+			subjects: []tool.Tool{
+				tool.Tool{
+					Mode:          tool.ModeApplyWithActions,
+					Environ:       []string{},
+					JobFilepath:   "testdata/03/job.yaml",
+					ValueFilepath: "testdata/03/values.yaml",
+					VaultPath:     "testdata/filevault",
+					Execute: &execute.Execute{
+						//TODO why is env needed? Environ:        []string{},
+						Kubectl: execute.Kubectl{
+							//TODO nil means use parent env
+							//Environ:     []string{},
 							Log: log,
 						},
+						//Out:            nil,
 						Log: log,
 					},
+					Log: log,
 				},
-				postConditions: []string{
-					//"wait pod -l app=example --for condition=Ready",
-				},
-				resources: resourceK8s,
-			},*/
+			},
+			postConditions: []string{
+				//"wait pod -l app=example --for condition=Ready",
+			},
+			resources: resourceK8s,
+		},
 		{
 			it:    "should_deploy_a_pod_in_ns1_and_then_rename_the_namespace_to_ns2_causing_ns1_to_be_pruned",
 			setup: []string{

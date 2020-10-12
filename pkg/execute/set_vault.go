@@ -39,14 +39,20 @@ func (x *Execute) setVault(id int, name string, doc []byte, portForward string, 
 		}
 	}
 
-	//err = vaultConfigPolicies(vault, av.Config.Policies)
-	//if err != nil {
-	//	return err
-	//}
-
-	err = x.vaultConfigKV(vault, av.Config.KV)
+	err = x.vaultLogicalConfig(vault, av.Config.Logicals)
 	if err != nil {
 		return err
+	}
+	err = x.vaultPolicyConfig(vault, av.Config.Policies)
+	if err != nil {
+		return err
+	}
+	// for backwards compatibility, will be removed
+	if av.Config.KV != nil {
+		err = x.vaultConfigKV(vault, av.Config.KV)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -61,29 +67,32 @@ type actionVault struct {
 	Config        vaultConfig `yaml:"config"`
 }
 
+// VaultConfig contains the data to write to Vault.
 type vaultConfig struct {
-	//Auth []xxx  `yaml:"auth"`
+	// Logical configuration
+	// logical:
+	// - path: secret/data/infra/iitech/exdns
+	//   data:
+	//     data:
+	Logicals []logicalItem `yaml:"logicals"`
+	// Policy configuration
+	// policy:
+	// - name: policy-name
+	//   rule: policy
 	Policies []policyItem `yaml:"policies"`
-	//Secrets []xxx  `yaml:"secrets"`
-	KV []kvItem `yaml:"kv"`
+
+	// KV is for backwards compatibility, will be removed, use logical instead
+	KV []logicalItem `yaml:"kv"`
+}
+
+type logicalItem struct {
+	Path string                 `yaml:"path"`
+	Data map[string]interface{} `yaml:"data"`
 }
 
 type policyItem struct {
-	Name  string `yaml:"name"`
-	Rules string `yaml:"rules"`
-}
-
-// Config contains data to write to Vault
-// kv:
-// - path: secret/data/infra/iitech/exdns
-//   type: kv
-//   data:
-//     data:
-//       CLIENT_ID: {{ vault }}
-type kvItem struct {
-	Type string                 `yaml:"type"`
-	Path string                 `yaml:"path"`
-	Data map[string]interface{} `yaml:"data"`
+	Name string `yaml:"name"`
+	Rule string `yaml:"rule"`
 }
 
 // KubectlPortForward starts a port-forward until context cancel or timeout.
@@ -141,27 +150,67 @@ func (x *Execute) waitForVaultUp(ctx context.Context, vault *api.Client) {
 	}
 }
 
-// VaultConfigKV writes  KV items to vault.
-func (x *Execute) vaultConfigKV(vault *api.Client, kv []kvItem) error {
+// VaultConfigKV writes KV items to vault.
+// Deprecated, use VaultLogicalConfig
+func (x *Execute) vaultConfigKV(vault *api.Client, kv []logicalItem) error {
 	for _, item := range kv {
-		switch item.Type {
-		case "kv":
-			var err error
-			x.Log.V(4).Info("Vault write kv", "path", item.Path)
-			exp := backoff.NewExponential(10 * time.Second)
-			for exp.Retries() < 10 {
-				_, err = vault.Logical().Write(item.Path, item.Data)
-				if err == nil {
-					break
-				}
-				exp.Sleep()
-				x.Log.V(4).Info("Vault write error, retrying", "error", err)
+		var err error
+		x.Log.V(4).Info("Vault write", "path", item.Path)
+		exp := backoff.NewExponential(10 * time.Second)
+		for exp.Retries() < 10 {
+			_, err = vault.Logical().Write(item.Path, item.Data)
+			if err == nil {
+				break
 			}
-			if err != nil {
-				return err
+			exp.Sleep()
+			x.Log.V(4).Info("Vault write error, retrying", "error", err)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// VaultLogicalConfig writes logical items to vault.
+func (x *Execute) vaultLogicalConfig(vault *api.Client, items []logicalItem) error {
+	for _, item := range items {
+		var err error
+		x.Log.V(4).Info("Vault write logical", "path", item.Path)
+		exp := backoff.NewExponential(10 * time.Second)
+		for exp.Retries() < 10 {
+			_, err = vault.Logical().Write(item.Path, item.Data)
+			if err == nil {
+				break
 			}
-		default:
-			return fmt.Errorf("expected type 'kv', got: %s", item.Type)
+			exp.Sleep()
+			x.Log.V(4).Info("Vault write error, retrying", "error", err)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// VaultPolicyConfig writes policies to vault.
+func (x *Execute) vaultPolicyConfig(vault *api.Client, items []policyItem) error {
+	for _, item := range items {
+		var err error
+		x.Log.V(4).Info("Vault write policy", "name", item.Name)
+		exp := backoff.NewExponential(10 * time.Second)
+		for exp.Retries() < 10 {
+			err = vault.Sys().PutPolicy(item.Name, item.Rule)
+			if err == nil {
+				break
+			}
+			exp.Sleep()
+			x.Log.V(4).Info("Vault write policy error, retrying", "error", err)
+		}
+		if err != nil {
+			return err
 		}
 	}
 

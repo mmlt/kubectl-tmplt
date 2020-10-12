@@ -145,19 +145,9 @@ spec:
       labels:
         app.kubernetes.io/name: bank-vaults
     spec:
-      initContainers:
-      {{- if index .Values "etcd-operator" "enabled" }}
-      - name: check-etcd-crd
-        image: lachlanevenson/k8s-kubectl
-        command: ['kubectl', 'get', 'customresourcedefinitions', 'etcdclusters.etcd.database.coreos.com']
-        {{- if .Values.etcd.resources }}
-        resources:
-        {{ toYaml .Values.etcd.resources | indent 10 }}
-        {{- end }} 
-      {{- end }}
       containers:
         - name: operator
-          image: banzaicloud/vault-operator:1.2.0
+          image: docker.io/banzaicloud/vault-operator:1.3.3
           imagePullPolicy: IfNotPresent
           command:
             - vault-operator

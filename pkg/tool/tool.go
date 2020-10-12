@@ -260,7 +260,7 @@ func (t *Tool) step(id int, stp, defaultValues, globalValues yamlx.Values, label
 		return nil, fmt.Errorf("expand %s: %w", tmpltPath, err)
 	}
 
-	var knsns []execute.KindNamespaceName //TODO wrong name and type
+	var knsns []execute.KindNamespaceName
 
 	n := filepath.Base(tmpltPath)
 	switch st {

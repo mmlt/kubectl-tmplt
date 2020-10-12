@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"github.com/go-logr/logr"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/backoff"
-	"github.com/mmlt/kubectl-tmplt/pkg/util/texttable"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
 	yaml2 "gopkg.in/yaml.v2"
 	"io"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"io/ioutil"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/yaml"
@@ -24,6 +24,9 @@ import (
 type Execute struct {
 	// DryRun prevents making changes to the target cluster.
 	DryRun bool
+
+	// NoDelete prevents prune from deleting resources.
+	NoDelete bool
 
 	// Environ are the environment variables on Tool invocation.
 	Environ []string
@@ -61,7 +64,7 @@ func (x *Execute) Wait(id int, flags string) error {
 
 	var stdout string
 	var err error
-	end := time.Now().Add(10 * time.Minute) // TODO Make time configurable via flag or env?
+	end := time.Now().Add(10 * time.Minute) // TODO Make time-out time configurable via flag or env?
 	for exp := backoff.NewExponential(10 * time.Second); !time.Now().After(end); exp.Sleep() {
 		stdout, _, err = x.Kubectl.Run(nil, "", args...)
 		if strings.Contains(stdout, "condition met") {
@@ -69,13 +72,13 @@ func (x *Execute) Wait(id int, flags string) error {
 		}
 	}
 	if err != nil {
-		return fmt.Errorf("##%d tpl %s: %w", id, "name", err) //TODO should be more imformative then 'name'
+		return fmt.Errorf("##%d tpl %s: %w", id, "name", err)
 	}
 
 	return nil
 }
 
-// Apply applies the resource in b to the target cluster.
+// Apply applies the yaml's in b to the target cluster.
 func (x *Execute) Apply(id int, name string, labels map[string]string, b []byte) ([]KindNamespaceName, error) {
 	docs, err := yamlx.SplitDoc(b)
 	if err != nil {
@@ -119,7 +122,7 @@ func (x *Execute) Apply(id int, name string, labels map[string]string, b []byte)
 			return nil, fmt.Errorf("##%s tpl %s: %w", id2, name, err)
 		}
 
-		x.log("apply", id, 0, name, stdout)
+		x.log("apply", id, i+1, name, stdout)
 	}
 
 	return resources, nil
@@ -136,42 +139,69 @@ func (x *Execute) Prune(id int, deployed []KindNamespaceName, labels map[string]
 		return err
 	}
 
+	// Sanity checks.
+	for _, k := range duplicates(deployed) {
+		x.log("prune WARNING; multiple deployments", id, 0, "", k.String())
+	}
+
+	invalid := invalidNamespace(deployed, apiResources)
+	if len(invalid) > 0 {
+		b := asCSV(invalid)
+		return fmt.Errorf("can't prune; namespace set when it's not needed or vise versa:\n%s", b.String())
+	}
+
 	// Get existing objects matching namespaces and labels.
+	// An empty string in namespaces also includes non-namespaced resources in the result.
 	cluster, err := x.getSelectedObjects(namespaces, labels, apiResources)
 	if err != nil {
 		return err
 	}
 
-	// diff what is in cluster but not in apply.
+	// Diff what is in cluster but not in apply.
+	// Ignore Version since for example deploying a v1beta1 might result in metav1.
 	toDelete := subtract(cluster, deployed)
 
-	// TODO remove namespace that are not in namespaces
-	// prevent deleting a namespace resources that match labels but are not in namespaces.
-	// (namespace resources themselves are non-namespaced and therefore included when prune.namespaces contains "")
+	// For namespaced resources we're only interested in the ones which namespace is in namespaces.
+	toDelete = keepNamespaced(toDelete, namespaces)
+
+	// Namespace resources are considered non-namespaced resources.
+	// But we don't want to delete a namespace that is not in namespaces.
 	toDelete = keepNamespaces(toDelete, namespaces)
 
-	// sort so namespaced resources are before non-namespaced resources.
+	// Sort so namespaced resources are before non-namespaced resources.
 	sort.Slice(toDelete, func(i, j int) bool {
+		//TODO (Mutating)WebhookConfiguration first
+		// https://github.com/helm/helm/blob/release-2.16/pkg/tiller/kind_sorter.go
 		return toDelete[i].Namespace > toDelete[j].Namespace
 	})
 
-	// delete
-	for i, r := range toDelete {
-		rn, err := resource(r.GVK, apiResources)
-		if err != nil {
-			return err
-		}
-		args := []string{"delete", rn, r.Name}
-		if r.Namespace != "" {
-			args = append(args, "-n", r.Namespace)
-		}
-		x.log("prune", id, i+1, "", strings.Join(args, " "))
-		_, _, err = x.Kubectl.Run(nil, "", args...)
-		if err != nil {
-			return fmt.Errorf("delete: %w", err)
+	if x.Log.V(5).Enabled() {
+		mustWriteAPIResourcesCSV(apiResources, "_apiresouces.txt")
+		mustWriteCSV(deployed, "_deployed.txt")
+		mustWriteCSV(cluster, "_cluster.txt")
+		mustWriteCSV(toDelete, "_delete.txt")
+	}
+
+	if !(x.NoDelete || x.DryRun) {
+		// Delete
+		for i, r := range toDelete {
+			rn, err := resource(r.GVK, apiResources)
+			if err != nil {
+				return err
+			}
+			args := []string{"delete", rn, r.Name}
+			if r.Namespace != "" {
+				args = append(args, "-n", r.Namespace)
+			}
+			x.log("prune", id, i+1, "", strings.Join(args, " "))
+			_, _, err = x.Kubectl.Run(nil, "", args...)
+			if err != nil {
+				return fmt.Errorf("delete: %w", err)
+			}
 		}
 	}
 
+	x.log("prune", id, 0, "", "prune completed")
 	return nil
 }
 
@@ -184,7 +214,7 @@ func (x *Execute) Action(id int, name string, doc []byte, portForward string, pa
 		}
 		//TODO unify generated output
 		fmt.Fprintln(x.Out, "---")
-		fmt.Fprintf(x.Out, "##%02d: %s [%s] %s\n", id+1, "InstrAction", pf, name)
+		fmt.Fprintf(x.Out, "##%02d: %s [%s] %s\n", id, "InstrAction", pf, name)
 		scanner := bufio.NewScanner(bytes.NewReader(doc))
 		for scanner.Scan() {
 			fmt.Fprintln(x.Out, "#", scanner.Text())
@@ -218,9 +248,12 @@ func (x *Execute) Action(id int, name string, doc []byte, portForward string, pa
 
 // Log a line.
 func (x *Execute) log(msg string, id, idmin int, tpl string, txt string) {
-	s := fmt.Sprintf("%02d", id)
-	if idmin > 0 {
-		s = fmt.Sprintf("%s.%02d", s, idmin)
+	var s string
+	if id > 0 {
+		s = fmt.Sprintf("%02d", id)
+		if idmin > 0 {
+			s = fmt.Sprintf("%s.%02d", s, idmin)
+		}
 	}
 	x.Log.Info(msg,
 		"id", s,
@@ -254,13 +287,9 @@ func updateObjectYaml(doc []byte, labels map[string]string) ([]byte, KindNamespa
 	return b, NewKindNamespaceName(obj), nil
 }
 
-// GetSelectedObjects returns all resources in the specified namespaces matching labels.
-func (x *Execute) getSelectedObjects(namespaces []string, labels map[string]string, apiResources []v1.APIResource) ([]KindNamespaceName, error) {
-	//apiResources, err := x.getK8sAPIResources()
-	//if err != nil {
-	//	return nil, err
-	//}
-
+// GetSelectedObjects returns all resources in the specified namespaces that match labels.
+// An empty string in namespaces selects non-namespaced resources.
+func (x *Execute) getSelectedObjects(namespaces []string, labels map[string]string, apiResources []metav1.APIResource) ([]KindNamespaceName, error) {
 	apiResources, err := filterAPIResources(apiResources)
 	if err != nil {
 		return nil, err
@@ -271,7 +300,7 @@ func (x *Execute) getSelectedObjects(namespaces []string, labels map[string]stri
 		namespaced := ns != ""
 		for _, ar := range apiResources {
 			if ar.Namespaced == namespaced {
-				rs, err := x.getObjects(ar.Kind, ns, labels)
+				rs, err := x.getObjects(fullAPIResourceName(ar), ns, labels)
 				if err != nil {
 					return nil, err
 				}
@@ -283,7 +312,7 @@ func (x *Execute) getSelectedObjects(namespaces []string, labels map[string]stri
 }
 
 // GetK8sAPIResources returns all APIResources registered in the cluster.
-func (x *Execute) getK8sAPIResources() ([]v1.APIResource, error) {
+func (x *Execute) getK8sAPIResources() ([]metav1.APIResource, error) {
 	args := []string{"api-resources"}
 	stdout, _, err := x.Kubectl.Run(nil, "", args...)
 	if err != nil {
@@ -295,7 +324,7 @@ func (x *Execute) getK8sAPIResources() ([]v1.APIResource, error) {
 	return textToAPIResources(stdout)
 }
 
-// GetObjects returns all instances of kind TODO(shouldn't this be GKV?) in namespace matching labels.
+// GetObjects returns all instances of kind in namespace that match labels.
 func (x *Execute) getObjects(kind, namespace string, labels map[string]string) ([]KindNamespaceName, error) {
 	args := []string{"get", kind, "-l", joinLabels(labels), "-o", "json"}
 	if namespace != "" {
@@ -330,22 +359,6 @@ func (x *Execute) getObjects(kind, namespace string, labels map[string]string) (
 	return r, nil
 }
 
-//TODO remove
-// DeleteObjects deletes all resources in list.
-//func (x *Execute) deleteObjects(list []KindNamespaceName) error {
-//	for _, r := range list {
-//		args := []string{"delete", r.Resource(), r.Name}
-//		if r.Namespace != "" {
-//			args = append(args, "-n", r.Namespace)
-//		}
-//		_, _, err := x.Kubectl.Run(nil, "", args...)
-//		if err != nil {
-//			return fmt.Errorf("delete: %w", err)
-//		}
-//	}
-//	return nil
-//}
-
 // JoinLabels returns a comma separated string with k=v pairs.
 func joinLabels(labels map[string]string) string {
 	var ss []string
@@ -360,7 +373,7 @@ func joinLabels(labels map[string]string) string {
 func NewKindNamespaceName(obj *unstructured.Unstructured) KindNamespaceName {
 	gvk := obj.GroupVersionKind()
 	return KindNamespaceName{
-		GVK: v1.GroupVersionKind{
+		GVK: metav1.GroupVersionKind{
 			Group:   gvk.Group,
 			Version: gvk.Version,
 			Kind:    gvk.Kind,
@@ -370,47 +383,36 @@ func NewKindNamespaceName(obj *unstructured.Unstructured) KindNamespaceName {
 	}
 }
 
-// KindNamespaceName TODO call it K8sResourceRef? K8sObjectRef
+// KindNamespaceName
+// TODO Use core/v1/ObjectReference and remove this type.
+// https://www.k8sref.io/docs/common-definitions/objectreference-/
 type KindNamespaceName struct {
-	GVK       v1.GroupVersionKind
+	GVK       metav1.GroupVersionKind
 	Namespace string
 	Name      string
 }
 
 // String makes the receiver implement Stringer.
 func (k KindNamespaceName) String() string {
-	return fmt.Sprintf("%s %s/%s", k.GVK.String(), k.Namespace, k.Name)
+	return fmt.Sprintf(`%v, %v, %v, %v, %v`,
+		k.GVK.Group, k.GVK.Version, k.GVK.Kind, k.Namespace, k.Name)
 }
-
-// Resource returns the name of the resource like; pod, configmap, xyz.constraints.gatekeeper.sh
-// TODO use APIResources to do mapping.
-func (k KindNamespaceName) Resource() string {
-	r := strings.ToLower(k.GVK.Kind)
-	if len(k.GVK.Group) > 0 {
-		r += "." + k.GVK.Group
-	}
-	return r
-}
-
-// Resource returns the name of the resource like; pod, configmap, xyz.constraints.gatekeeper.sh
-func resource(gvk v1.GroupVersionKind, resources []v1.APIResource) (string, error) {
-	for _, r := range resources {
-		if r.Kind == gvk.Kind && r.Group == gvk.Group {
-			return r.Name, nil
-		}
-	}
-	return "", fmt.Errorf("no api-resource for %s", gvk.String())
+func kindNamespaceNameHeader() string {
+	return "Group, Version, Kind, Namespace, Name"
 }
 
 // Subtract returns a - b
+// Ignore GVK Version when comparing.
 func subtract(a, b []KindNamespaceName) []KindNamespaceName {
 	idx := make(map[KindNamespaceName]bool, len(b))
 	for _, x := range b {
+		x.GVK.Version = ""
 		idx[x] = true
 	}
 
 	var r []KindNamespaceName
 	for _, x := range a {
+		x.GVK.Version = ""
 		if _, inB := idx[x]; inB {
 			continue
 		}
@@ -420,8 +422,45 @@ func subtract(a, b []KindNamespaceName) []KindNamespaceName {
 	return r
 }
 
-// KeepNamespaces removes any Namespace resource that's not in namespaces.
-func keepNamespaces(list []KindNamespaceName, namespaces []string) []KindNamespaceName {
+func duplicates(list []KindNamespaceName) []KindNamespaceName {
+	idx := make(map[KindNamespaceName]int, len(list))
+	for _, x := range list {
+		x.GVK.Version = ""
+		idx[x]++
+	}
+
+	var r []KindNamespaceName
+	for k, v := range idx {
+		if v <= 1 {
+			continue
+		}
+		r = append(r, k)
+	}
+
+	return r
+}
+
+func asCSV(list []KindNamespaceName) bytes.Buffer {
+	var b bytes.Buffer
+	b.WriteString(kindNamespaceNameHeader())
+	b.WriteString("\n")
+	for _, x := range list {
+		b.WriteString(x.String())
+		b.WriteString("\n")
+	}
+	return b
+}
+
+func mustWriteCSV(list []KindNamespaceName, filename string) {
+	b := asCSV(list)
+	err := ioutil.WriteFile(filename, b.Bytes(), 0644)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// KeepNamespaced removes namespaced resources that are not in namespaces.
+func keepNamespaced(list []KindNamespaceName, namespaces []string) []KindNamespaceName {
 	idx := make(map[string]bool, len(namespaces))
 	for _, x := range namespaces {
 		idx[x] = true
@@ -429,7 +468,7 @@ func keepNamespaces(list []KindNamespaceName, namespaces []string) []KindNamespa
 
 	var r []KindNamespaceName
 	for _, x := range list {
-		if _, included := idx[x.Name]; x.Namespace == "" && !included {
+		if _, included := idx[x.Namespace]; !included {
 			continue
 		}
 		r = append(r, x)
@@ -438,70 +477,43 @@ func keepNamespaces(list []KindNamespaceName, namespaces []string) []KindNamespa
 	return r
 }
 
-/*** APIResource helpers ***/
+// KeepNamespaces removes Namespace resources (which are non-namespaced) that are not in namespaces.
+func keepNamespaces(list []KindNamespaceName, namespaces []string) []KindNamespaceName {
+	idx := make(map[string]bool, len(namespaces))
+	for _, x := range namespaces {
+		idx[x] = true
+	}
 
-func filterAPIResources(list []v1.APIResource) ([]v1.APIResource, error) {
-	const remove = `NAME                              SHORTNAMES   APIGROUP                       NAMESPACED   KIND
-apiservices                                    apiregistration.k8s.io         false        APIService
-bindings                                                                      true         Binding
-certificatesigningrequests        csr          certificates.k8s.io            false        CertificateSigningRequest
-componentstatuses                 cs                                          false        ComponentStatus
-controllerrevisions                            apps                           true         ControllerRevision
-csinodes                                       storage.k8s.io                 false        CSINode
-endpoints                         ep                                          true         Endpoints
-events                            ev                                          true         Event
-limitranges                       limits                                      true         LimitRange
-localsubjectaccessreviews                      authorization.k8s.io           true         LocalSubjectAccessReview
-nodes                             no                                          false        Node
-podtemplates                                                                  true         PodTemplate
-runtimeclasses                                 node.k8s.io                    false        RuntimeClass
-selfsubjectaccessreviews                       authorization.k8s.io           false        SelfSubjectAccessReview
-selfsubjectrulesreviews                        authorization.k8s.io           false        SelfSubjectRulesReview
-storageclasses                    sc           storage.k8s.io                 false        StorageClass
-subjectaccessreviews                           authorization.k8s.io           false        SubjectAccessReview
-tokenreviews                                   authentication.k8s.io          false        TokenReview
-volumeattachments                              storage.k8s.io                 false        VolumeAttachment
-`
-	rlist, err := textToAPIResources(remove)
-	if err != nil {
-		return nil, err
-	}
-	var result []v1.APIResource
-	for _, ar := range list {
-		ok := true
-		for _, rar := range rlist {
-			if ar.Name == rar.Name {
-				ok = false
-				break
-			}
+	var r []KindNamespaceName
+	for _, x := range list {
+		if _, included := idx[x.Name]; x.GVK.Kind == "Namespace" && !included {
+			continue
 		}
-		if ok {
-			result = append(result, ar)
-		}
+		r = append(r, x)
 	}
-	return result, nil
+
+	return r
 }
 
-func textToAPIResources(txt string) ([]v1.APIResource, error) {
-	t := texttable.Read(strings.NewReader(txt), 3)
-	iter := t.RowIter()
-	var result []v1.APIResource
-	for iter.Next() {
-		ar := v1.APIResource{}
-		//TODO handle ok from GetColByName
-		s, _ := iter.GetColByName("NAME")
-		ar.Name = s
-		s, _ = iter.GetColByName("APIGROUP")
-		//if s == "" {
-		//	// use the group of the containing resource (APIResourceList)
-		//	s = "v1"
-		//}
-		ar.Group = s
-		s, _ = iter.GetColByName("NAMESPACED")
-		ar.Namespaced = (s == "true")
-		s, _ = iter.GetColByName("KIND")
-		ar.Kind = s
-		result = append(result, ar)
+// InvalidNamespace returns the members of list that either have;
+// 1) a namespace set while it's a non-namespaced resource
+// 2) doesn't have a namespace set while it's a namespaced resource (we don't want
+// to rely on the namespace defaulting to what's in kubeconfig)
+func invalidNamespace(list []KindNamespaceName, resources []metav1.APIResource) []KindNamespaceName {
+	idx := make(map[metav1.GroupVersionKind]bool, len(resources))
+	for _, x := range resources {
+		idx[metav1.GroupVersionKind{Group: x.Group, Kind: x.Kind}] = x.Namespaced
 	}
-	return result, nil
+
+	var r []KindNamespaceName
+	for _, x := range list {
+		i := x.GVK
+		i.Version = ""
+		namespaced := idx[i]
+		hasNamespace := x.Namespace != ""
+		if !(namespaced == hasNamespace) {
+			r = append(r, x)
+		}
+	}
+	return r
 }

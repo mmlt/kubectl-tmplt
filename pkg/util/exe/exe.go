@@ -59,10 +59,10 @@ func Run(ctx context.Context, log logr.Logger, options *Opt, stdin string, cmd s
 	if err != nil && err.Error() != "signal: killed" {
 		// Do not consider 'signal: killed' an error as the log line might cause the user to think something went wrong.
 		// Signal kill is the result of port-forward being stopped by context Cancel().
-		log.Error(err, "Run-result", "stderr", stderr)
+		log.V(3).Info("Run-result", "error", nil, "stderr", stderr, "stdout", stdout)
 		return "", "", fmt.Errorf("%s %v: %w - %s", cmd, args, err, stderr)
 	}
-	log.V(3).Info("Run-result", "stderr", stderr, "stdout", stdout)
+	log.V(3).Info("Run-result", "error", err, "stderr", stderr, "stdout", stdout)
 
 	return
 }

@@ -28,6 +28,9 @@ generate-with-actions - generates templates and actions and writes them to stdou
 	var dryRun bool
 	flag.BoolVar(&dryRun, "dry-run", false,
 		`Dry-run prevents any change being made to the target cluster`)
+	var noDelete bool
+	flag.BoolVar(&dryRun, "no-delete", false,
+		`No-delete prevents prune from deleting resources in target cluster`)
 
 	var jobFile string
 	flag.StringVar(&jobFile, "job-file", "",
@@ -97,7 +100,9 @@ generate-with-actions - generates templates and actions and writes them to stdou
 		ValueFilepath: setFile,
 		VaultPath:     masterVaultPath,
 		Execute: &execute.Execute{
-			Environ: environ,
+			DryRun:   dryRun,
+			NoDelete: noDelete,
+			Environ:  environ,
 			Kubectl: execute.Kubectl{
 				KubeConfig:  kubeConfig,
 				KubeContext: kubeContext,
@@ -176,6 +181,38 @@ func (f *setValuesFlag) Set(s string) error {
 // text argument: %[1]=program name, %[2]=program version.
 const help = `%[1]s reads a job file and performs the steps. 
 
+%[1]s can operate in 'generate' or 'apply' mode.
+In 'generate' mode a 'kubectl apply -f -' consumable output is generated ('wait' and 'action' steps are skipped)
+In 'apply' mode steps are applied to the target cluster and optioanlly resources are pruned.
+
+
+JOB FILE
+A Job file specifies what %[1]s should do.
+
+Consider a job file containing;
+	prune:
+	  labels:
+		my.example.com/gitops: minikube-all
+	  namespaces: ["", "my-system"]
+    
+	steps:
+	- tmplt: tpl/example.txt
+	  values:
+		text: "{{ .Values.first }} {{ .Values.second }}"
+	defaults:
+	  first: hello
+	  second: world
+
+Job files can contain templated values. In the above example .Values.text="hello world" is being passed to the template.
+Caveats:
+- The job file is parsed before expansion therefore {{ }} need to be wrapped in double quotes to have (arguably) valid yaml.
+- There is currently no easy way to see the content of the job file after expansion.
+
+Prune (optional) makes %[1]s to 1) add labels to all resources and 2) delete cluster resources that match labels and
+namespaces but are not in the deployment.
+Note:
+- Each Job file must use unique labels (otherwise they prune each others resources)
+- Prune causes fields in yaml output to be sorted, comments to be removed, single quotes become double quotes.
 
 
 STEPS
@@ -217,20 +254,24 @@ When a Secret is successfully fetched its 'data' field can be used in subsequent
 
 setVault
 SetVault writes one or more secrets to target cluster Vault.
-This action step accepts a 'portForward:' settings that tunnels a localhost connection to the target cluster. 
+This action step accepts a 'portForward:' setting that tunnels a localhost connection to the target cluster. 
 A getSecret template contains the following arguments;
     type: setVault
 	url: https://localhost:8200
 	tlsSkipVerify: "true"
 	token: {{ index .Get "secret" "namespace-of-secret" "name-of-secret" "data" "vault-root" | b64dec }}
 	config:
-	  kv:
-	  - type: kv
-		path: secret/data/kubectltmplt/test
+	  logicals:
+	  - path: secret/data/test
 		data:
 		  data:
 			USER: superman
 			PW: supersecret
+      policies:
+      - name: secret_allow
+    	rule: path "secret/*" {
+            capabilities = ["create", "read", "update", "delete", "list"]
+          }
 
 
 TEMPLATING
@@ -277,17 +318,5 @@ For example a secret named 'xyz' with value '{"name":"superman"}'
 NB. JSON is valid YAML
 
 
-EXPERIMENTAL
-v0.3.0 allows for job files to contain templated values, for example:
-	steps:
-	- tmplt: tpl/example.txt
-	  values:
-		text: "{{ .Values.first }} {{ .Values.second }}"
-	defaults:
-	  first: hello
-	  second: world
-results in .Values.text="hello world" being passed to the template.
-Caveats:
-- The job file is parsed before expansion therefore {{ }} need to be wrapped in double quotes to have (arguably) valid yaml.
-- There is currently no easy way to see the content of the job file after expansion.
+
 `

@@ -1,6 +1,5 @@
 # Create Vault instance.
 
----
 apiVersion: "vault.banzaicloud.com/v1alpha1"
 kind: "Vault"
 metadata:
@@ -10,8 +9,9 @@ metadata:
     saxo.com/gitops: {{ .Values.gitops }}
 spec:
   size: 1
-  image: vault:1.3.1 
-  bankVaultsImage: banzaicloud/bank-vaults:1.2.0
+  image: docker.io/vault:1.3.6
+  bankVaultsImage: docker.io/banzaicloud/bank-vaults:1.3.3
+  statsdImage: docker.io/prom/statsd-exporter:v0.18.0
 
   # Common annotations for all created resources
   annotations:
@@ -141,7 +141,11 @@ spec:
       rules: path "secret/data/ns/default/*" {
           capabilities = ["create", "read", "update", "delete", "list"]
         }
-        
+    - name: allow_pkixyz
+      rules: path "pkixyz/*" {
+          capabilities = ["create", "read", "update", "delete", "list"]
+        }
+
     auth:
     - type: kubernetes
       roles:
@@ -151,11 +155,35 @@ spec:
         policies: allow_secrets
         ttl: 1h
     secrets:
-    - path: secret
-      type: kv
+    - type: kv
+      path: secret
       description: General secrets.
       options:
         version: 2
+    # The PKI secrets engine generates X.509 certificates
+    # See https://www.vaultproject.io/docs/secrets/pki/index.html for more information
+    - type: pki
+      path: pkixyz
+      description: Vault PKI Backend
+      config:
+        default_lease_ttl: 168h
+        max_lease_ttl: 720h
+      configuration:
+        config:
+        - name: urls
+          issuing_certificates: https://vault.vault.kt-test:8200/v1/pkixyz/ca
+          crl_distribution_points: https://vault.vault.kt-test:8200/v1/pkixyz/crl
+        roles:
+        - name: default
+          allowed_domains: pod,svc,default
+          allow_subdomains: true
+          generate_lease: true
+        - name: foobarer
+          allowed_domains: foobar
+          allow_subdomains: true
+          generate_lease: true
+          server_flag: false
+          ttl: 30m
 
     # Allows writing some secrets to Vault (useful for development purposes).
     # See https://www.vaultproject.io/docs/secrets/kv/index.html for more information.
@@ -179,9 +207,9 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: vault-file
-  namespace: {{ .Values.namespace }}
+  namespace: "{{ .Values.namespace }}"
   labels:
-    saxo.com/gitops: {{ .Values.gitops }}
+    saxo.com/gitops: "{{ .Values.gitops }}"
 spec:
   # https://kubernetes.io/docs/concepts/storage/persistent-volumes/#class-1
   # storageClassName: ""

@@ -64,6 +64,4 @@ More examples in `test/e2e/testdata/`
 
 
 ## Wishlist
-- add label (also needed for prune)
-- prune
-- kustomize step
+- Support templates with other delimiters than {{ }}. Use-case; prometheus config uses {{}} but needs to be templated as well. 

@@ -3,24 +3,29 @@ url: https://localhost:8200
 tlsSkipVerify: "true"
 token: {{ indexOrDefault "<no value>" .Get "secret" .Values.namespace "vault-unseal-keys" "data" "vault-root" | b64dec }}
 config:
-  #  policies:
-  #  - name:
-  #    rules:
-  kv:
+  kv: # deprecated, only here for backwards compatibility test
   - type: kv
     path: secret/data/kubectltmplt/test
     data:
       data:
         USER: superman
         PW: supersecret
-  - type: kv
-    path: secret/data/kubectltmplt/txt
+  logicals:
+  - path: secret/data/kubectltmplt/txt
     data:
       data:
         NAME: {{ vault "secret-txt" "" }}
-  - type: kv
-    path: secret/data/kubectltmplt/json
+  - path: secret/data/kubectltmplt/json
     data:
       data:
         USER: {{ vault "secret-json" "user" }}
         PW: {{ vault "secret-json" "password" }}
+  - path: pkixyz/config/ca
+    data:
+      {{- $name := print "xyz" "-" "cert" }}
+      pem_bundle: {{ print (vault $name "cert") (vault "xyz-cert" "key") | toJson }}
+  policies:
+  - name: pkixyz_issue
+    rule: path "pkixyz/issue/*" {
+        capabilities = ["create", "update"]
+      }
