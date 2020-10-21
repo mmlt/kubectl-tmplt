@@ -29,7 +29,7 @@ generate-with-actions - generates templates and actions and writes them to stdou
 	flag.BoolVar(&dryRun, "dry-run", false,
 		`Dry-run prevents any change being made to the target cluster`)
 	var noDelete bool
-	flag.BoolVar(&dryRun, "no-delete", false,
+	flag.BoolVar(&noDelete, "no-delete", false,
 		`No-delete prevents prune from deleting resources in target cluster`)
 
 	var jobFile string
@@ -183,7 +183,7 @@ const help = `%[1]s reads a job file and performs the steps.
 
 %[1]s can operate in 'generate' or 'apply' mode.
 In 'generate' mode a 'kubectl apply -f -' consumable output is generated ('wait' and 'action' steps are skipped)
-In 'apply' mode steps are applied to the target cluster and optioanlly resources are pruned.
+In 'apply' mode steps are applied to the target cluster and (optionally) objects are pruned.
 
 
 JOB FILE
@@ -193,7 +193,11 @@ Consider a job file containing;
 	prune:
 	  labels:
 		my.example.com/gitops: minikube-all
-	  namespaces: ["", "my-system"]
+	  store:
+		name: minikube-all
+		namespace: default
+		x:
+		  time: "{{ now | date ` + "`" + `2000-01-02 13:14:15` + "`" + ` }}"
     
 	steps:
 	- tmplt: tpl/example.txt
@@ -208,11 +212,12 @@ Caveats:
 - The job file is parsed before expansion therefore {{ }} need to be wrapped in double quotes to have (arguably) valid yaml.
 - There is currently no easy way to see the content of the job file after expansion.
 
-Prune (optional) makes %[1]s to 1) add labels to all resources and 2) delete cluster resources that match labels and
-namespaces but are not in the deployment.
+Prune (optional) makes %[1]s to 1) add labels to all objects and 2) delete cluster resources that are no longer in the
+list of deployed objects. The list of deployed objects is stored as a ConfigMap with store.namespace/name in the target cluster.
+Extra fields can be stored by putting them below 'x', in the example a 'time' field is added with the time of deployment.
 Note:
-- Each Job file must use unique labels (otherwise they prune each others resources)
-- Prune causes fields in yaml output to be sorted, comments to be removed, single quotes become double quotes.
+- Each Job file must use an unique store.namespace/name (otherwise they prune each others resources)
+- Labeling causes fields in yaml output to be sorted, comments to be removed, single quotes become double quotes.
 
 
 STEPS
@@ -315,8 +320,5 @@ Any number of files is allowed. The filename matches the secret name, the file c
 For example a secret named 'xyz' with value '{"name":"superman"}'
     {{ vault "xyz" "name" }} expands to superman
     {{ vault "xyz" "" }} expands to {"name":"superman"}
-NB. JSON is valid YAML
-
-
 
 `

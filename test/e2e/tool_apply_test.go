@@ -33,7 +33,7 @@ func TestApply(t *testing.T) {
 		// resources is a comma separated list of the required external resources to run a test
 		resources string
 	}{
-		{
+		/*	{
 			it: "should_deploy_and_configure_vault_with_values_from_filevault",
 			setup: []string{
 				// test with a freshly created Vault (beware; deleting and recreating vault takes minutes)
@@ -66,27 +66,20 @@ func TestApply(t *testing.T) {
 				//"wait pod -l app=example --for condition=Ready",
 			},
 			resources: resourceK8s,
-		},
+		},*/
 		{
 			it:    "should_deploy_a_pod_in_ns1_and_then_rename_the_namespace_to_ns2_causing_ns1_to_be_pruned",
-			setup: []string{
-				//TODO enable again "delete namespace ns1 ns2",
-			},
+			setup: []string{},
 			subjects: []tool.Tool{
 				tool.Tool{
 					Mode:          tool.ModeApply,
 					Environ:       []string{},
 					JobFilepath:   "testdata/00/prune-1-job.yaml",
 					ValueFilepath: "testdata/00/values.yaml",
-					//VaultPath:     "testdata/filevault",
 					Execute: &execute.Execute{
-						//TODO why is env needed? Environ:        []string{},
 						Kubectl: execute.Kubectl{
-							//TODO nil means use parent env
-							//Environ:     []string{},
 							Log: log,
 						},
-						//Out:            nil,
 						Log: log,
 					},
 					Log: log,
@@ -96,15 +89,10 @@ func TestApply(t *testing.T) {
 					Environ:       []string{},
 					JobFilepath:   "testdata/00/prune-2-job.yaml",
 					ValueFilepath: "testdata/00/values.yaml",
-					//VaultPath:     "testdata/filevault",
 					Execute: &execute.Execute{
-						//TODO why is env needed? Environ:        []string{},
 						Kubectl: execute.Kubectl{
-							//TODO nil means use parent env
-							//Environ:     []string{},
 							Log: log,
 						},
-						//Out:            nil,
 						Log: log,
 					},
 					Log: log,

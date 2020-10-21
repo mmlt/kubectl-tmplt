@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-/*** APIResource helpers ***/
+// APIResource helpers
 
 // FilterAPIResources removes resources that are not deployable.
 func filterAPIResources(list []metav1.APIResource) ([]metav1.APIResource, error) {
@@ -53,6 +53,7 @@ volumeattachments                              storage.k8s.io                 fa
 	return result, nil
 }
 
+// TextToAPIResources turns text into APIResource objects.
 func textToAPIResources(txt string) ([]metav1.APIResource, error) {
 	t := texttable.Read(strings.NewReader(txt), 3)
 	iter := t.RowIter()
@@ -73,6 +74,7 @@ func textToAPIResources(txt string) ([]metav1.APIResource, error) {
 	return result, nil
 }
 
+// MustWriteAPIResourcesCSV writes a CSV file with list for debugging purposes.
 func mustWriteAPIResourcesCSV(list []metav1.APIResource, filename string) {
 	b := asAPIResourceCSV(list)
 	err := ioutil.WriteFile(filename, b.Bytes(), 0644)
@@ -81,6 +83,7 @@ func mustWriteAPIResourcesCSV(list []metav1.APIResource, filename string) {
 	}
 }
 
+// AsAPIResourceCSV turns list into a CSV formatted text.
 func asAPIResourceCSV(list []metav1.APIResource) bytes.Buffer {
 	var b bytes.Buffer
 	b.WriteString("Group,Version,Kind,Name,Namespaced\n")

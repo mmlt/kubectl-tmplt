@@ -1,8 +1,11 @@
 prune:
   labels:
-    gitops.example.com/repo: testdata-00
-  namespaces:
-    - default
+    gitops.example.com/repo: testdata-00-simple
+  store:
+    name: testdata-00-simple
+    namespace: default
+    x:
+      time: "{{ now | date `2000-01-02 13:14:15 CET` }}"
 
 steps:
   - tmplt: "template.yaml"

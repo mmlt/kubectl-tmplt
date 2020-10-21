@@ -83,7 +83,7 @@ const (
 type Executor interface {
 	Wait(id int, flags string) error
 	Apply(id int, name string, labels map[string]string, doc []byte) ([]execute.KindNamespaceName, error)
-	Prune(id int, deployed []execute.KindNamespaceName, labels map[string]string, namespaces []string) error
+	Prune(id int, deployed []execute.KindNamespaceName, store execute.Store) error
 	Action(id int, name string, doc []byte, portForward string, passedValues *yamlx.Values) error
 }
 
@@ -159,25 +159,24 @@ func (t *Tool) run(setValues yamlx.Values, values, job []byte) error {
 
 	// process job.
 
-	type Prune struct {
-		// Labels to add to all resource and query for existing resources.
-		Labels map[string]string `yaml:"labels"`
-		// Namespaces to consider during pruning.
-		// Add "" to prune non-namespaced resources.
-		Namespaces []string `yaml:"namespaces"`
-	}
 	j := &struct {
-		Prune Prune `yaml:"prune"`
+		// prune configures the pruning of old objects.
+		Prune struct {
+			// labels to add to all objects.
+			Labels map[string]string
+			// store config.
+			Store execute.Store
+		}
 		// steps to run.
-		Steps []yamlx.Values `yaml:"steps"`
+		Steps []yamlx.Values
 		// default values for steps.
-		Defaults yamlx.Values `yaml:"defaults"`
+		Defaults yamlx.Values
 	}{}
 
 	// read job defaults
 	err = yaml2.Unmarshal(job, j)
 	if err != nil {
-		return fmt.Errorf("j file %s: %w", t.JobFilepath, err)
+		return fmt.Errorf("file %s: %w", t.JobFilepath, err)
 	}
 
 	// expand job with its own defaults and globalValues
@@ -212,13 +211,12 @@ func (t *Tool) run(setValues yamlx.Values, values, job []byte) error {
 		id++
 	}
 
-	if len(j.Prune.Labels) > 0 && len(j.Prune.Namespaces) > 0 {
-		err = t.Execute.Prune(id, deployedKNSNs, j.Prune.Labels, j.Prune.Namespaces)
+	if len(j.Prune.Store.Name) > 0 && len(j.Prune.Store.Namespace) > 0 {
+		err = t.Execute.Prune(id, deployedKNSNs, j.Prune.Store)
 		if err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 

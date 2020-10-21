@@ -13,7 +13,7 @@ spec:
   - args:
     - sleep
     - "3600"
-    image: ubuntu
+    image: docker.io/ubuntu
     name: ubuntu
 
 ---
