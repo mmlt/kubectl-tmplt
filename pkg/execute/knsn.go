@@ -41,7 +41,7 @@ func kindNamespaceNameHeader() string {
 }
 
 // Subtract returns a - b
-// Ignore GVK Version when comparing.
+// Ignore Version since for example deploying a v1beta1 might result in metav1.
 func subtract(a, b []KindNamespaceName) []KindNamespaceName {
 	idx := make(map[KindNamespaceName]bool, len(b))
 	for _, x := range b {

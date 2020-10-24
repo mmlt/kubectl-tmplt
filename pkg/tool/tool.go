@@ -67,12 +67,6 @@ const (
 	// ModeApplyWithActions generates and applies templates and actions to the target cluster.
 	ModeApplyWithActions = ModeApply | ModeActions
 
-	// ModePrune removes the resources from the target cluster that are not in the generated
-	// resources but are within a label selection.
-	// NB. how is remove resources that are still in use by 'old' pods during rolling update is TBD.
-	// NB2. needs a way to automatically add a label to all resources deployed.
-	//ModePrune Mode = 1 << iota
-
 	// The following Modes can only be used in combination with above modes.
 
 	// ModeActions is true for a modes that perform actions.
@@ -211,7 +205,7 @@ func (t *Tool) run(setValues yamlx.Values, values, job []byte) error {
 		id++
 	}
 
-	if len(j.Prune.Store.Name) > 0 && len(j.Prune.Store.Namespace) > 0 {
+	if len(j.Prune.Store.Name) > 0 && len(j.Prune.Store.Namespace) > 0 && t.Mode&ModeGenerate == 0 {
 		err = t.Execute.Prune(id, deployedKNSNs, j.Prune.Store)
 		if err != nil {
 			return err

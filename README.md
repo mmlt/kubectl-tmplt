@@ -2,9 +2,15 @@
 
 A `kubectl` plugin to expand and apply templated resource files to a cluster.
 
-Compared to Helm it;
+Features;
 - doesn't use 'charts' as intermediate when applying resources to target cluster.
 - allows to wait for certain conditions in the target cluster before (continuing) applying resources.
+- can fetch values from a "master vault" for use in templating or actions.
+- can prune.
+- can label all resources.
+- can perform actions to:
+  - read value from cluster to use in subsequent templating steps.
+  - write to HashiVault policy or logical paths 
 
 
 ## Quick Start
@@ -66,17 +72,12 @@ More examples in `test/e2e/testdata/` and `kubectl tmplt --help`
 ## Wishlist
 - Support templates with other delimiters than {{ }}. Use-case; prometheus config uses {{ }} but needs to be templated as well. 
 - [could have] 'delete' step. Use-case: delete CR and wait for operator to do it's work, then delete(prune?) operator. 
-- [could have] prune stores a list of deployed resources instead of querying the cluster by labels.
 
 
 ## Known issues
 
-### Prune
-Prune is slow. Prune queries the cluster for all `kubectl api-resources` in the prune.namespaces and this takes one or more minutes.
 
-Prune expects the group of an object to stay the same. For example deploying Ingress with `apiVersion: networking.k8s.io/v1beta1`
-results in an Ingress `apiVersion: extensions/v1beta1` and causes it to be pruned.
-In such a case update the group in the templates.
+
 
 
   

@@ -232,7 +232,7 @@ func (m *fakeDoer) Apply(id int, name string, labels map[string]string, doc []by
 	return nil /*TODO*/, nil
 }
 
-func (m *fakeDoer) Prune(id int, deployed []execute.KindNamespaceName, store Store) error {
+func (m *fakeDoer) Prune(id int, deployed []execute.KindNamespaceName, store execute.Store) error {
 	panic("implement me") //TODO
 }
 

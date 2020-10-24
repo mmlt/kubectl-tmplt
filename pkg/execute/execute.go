@@ -129,13 +129,12 @@ func (x *Execute) Apply(id int, name string, labels map[string]string, b []byte)
 func (x *Execute) Prune(id int, deployed []KindNamespaceName, store Store) error {
 	idmin := 0
 
-	//TODO move to validation
-	// Sanity checks
+	//TODO move to validation function (or separate validation tool?)
 	for _, k := range duplicates(deployed) {
 		idmin++
+		// same group/kind namespace/name used multiple times
 		x.log("prune WARNING; multiple deployments", id, idmin, "", k.String())
 	}
-
 	apiResources, err := x.getK8sAPIResources()
 	if err != nil {
 		return err
@@ -143,21 +142,24 @@ func (x *Execute) Prune(id int, deployed []KindNamespaceName, store Store) error
 	invalid := invalidNamespace(deployed, apiResources)
 	if len(invalid) > 0 {
 		b := asCSV(invalid)
-		return fmt.Errorf("can't prune; namespace set when it's not needed or vise versa:\n%s", b.String())
+		// namespace set on non-namespaced resource or namespace is missing (empty) on namespaced resource.
+		return fmt.Errorf("namespace set when it's not needed or vise versa:\n%s", b.String())
 	}
-	//TODO end
 
 	// Read configmap with previously deployed resources.
 	idmin++
 	x.log("prune", id, idmin, "", "read store")
 	cluster, err := x.readStore(store)
 	if err != nil {
-		idmin++
-		x.log("prune skipped (no store)", id, idmin, "", err.Error())
+		if strings.Contains(err.Error(), "Error from server (NotFound):") {
+			idmin++
+			x.log("prune", id, idmin, "", "skipped: no store found")
+		} else {
+			return fmt.Errorf("prune read store: %w", err)
+		}
 	}
 
-	// Diff what is in cluster but not in apply.
-	// Ignore Version since for example deploying a v1beta1 might result in metav1.
+	// Diff what is in cluster but not in deployed.
 	toDelete := subtract(cluster, deployed)
 
 	// Sort so namespaced resources are before non-namespaced resources.
@@ -184,7 +186,6 @@ func (x *Execute) Prune(id int, deployed []KindNamespaceName, store Store) error
 		if r.Namespace != "" {
 			args = append(args, "-n", r.Namespace)
 		}
-		idmin++
 		if x.NoDelete || x.DryRun {
 			x.log("prune", id, idmin+i, "", "skipped "+strings.Join(args, " "))
 			continue
