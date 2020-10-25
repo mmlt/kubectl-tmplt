@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sort"
 )
 
 // KindNamespaceName
@@ -40,7 +41,7 @@ func kindNamespaceNameHeader() string {
 	return "Group, Version, Kind, Namespace, Name"
 }
 
-// Subtract returns a - b
+// Subtract returns a - b while keeping a order.
 // Ignore Version since for example deploying a v1beta1 might result in metav1.
 func subtract(a, b []KindNamespaceName) []KindNamespaceName {
 	idx := make(map[KindNamespaceName]bool, len(b))
@@ -61,6 +62,13 @@ func subtract(a, b []KindNamespaceName) []KindNamespaceName {
 	return r
 }
 
+// Reverse reverses list in place.
+func reverse(list []KindNamespaceName) {
+	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
+		list[i], list[j] = list[j], list[i]
+	}
+}
+
 // Duplicates returns list items that use the same GroupKind/namespace/name (IOW overwrite each other).
 func duplicates(list []KindNamespaceName) []KindNamespaceName {
 	idx := make(map[KindNamespaceName]int, len(list))
@@ -78,6 +86,62 @@ func duplicates(list []KindNamespaceName) []KindNamespaceName {
 	}
 
 	return r
+}
+
+// SortInDeleteOrder sorts list in place.
+// Sort order:
+//	(Mutating)WebhookConfiguration first
+//  namespaced before non-namespaced
+//	workloads before other namespaced resources
+//	CustomResourceDefinition last
+func sortInDeleteOrder(list []KindNamespaceName) {
+	sort.Slice(list, func(i, j int) bool {
+		// WebhookConfigurations first
+		if before(list[i].GVK.Kind, list[j].GVK.Kind, "MutatingWebhookConfiguration", "ValidatingWebhookConfiguration") {
+			return true
+		}
+
+		// namespaced before non-namespaced
+		if list[i].Namespace > list[j].Namespace {
+			return true
+		}
+		if list[i].Namespace < list[j].Namespace {
+			return false
+		}
+
+		// incoming traffic
+		if before(list[i].GVK.Kind, list[j].GVK.Kind, "APIService", "Ingress", "Service") {
+			return true
+		}
+
+		// workloads
+		if before(list[i].GVK.Kind, list[j].GVK.Kind, "CronJob", "Job", "StatefulSet") {
+			return true
+		}
+		if before(list[i].GVK.Kind, list[j].GVK.Kind, "HorizontalPodAutoscaler") {
+			return true
+		}
+		if before(list[i].GVK.Kind, list[j].GVK.Kind, "Deployment", "ReplicaSet", "ReplicationController", "Pod", "DaemonSet") {
+			return true
+		}
+
+		// https://github.com/helm/helm/blob/release-2.16/pkg/tiller/kind_sorter.go
+		return false
+	})
+}
+
+// Before returns true when l is in list and r isn't.
+func before(l, r string, list ...string) bool {
+	in := func(e string, list ...string) bool {
+		for _, v := range list {
+			if e == v {
+				return true
+			}
+		}
+		return false
+	}
+
+	return in(l, list...) && !in(r, list...)
 }
 
 // MustWriteCSV writes a CSV file with list for debugging purposes.

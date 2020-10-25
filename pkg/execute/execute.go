@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/serializer/yaml"
-	"sort"
 	"strings"
 	"time"
 )
@@ -162,12 +161,9 @@ func (x *Execute) Prune(id int, deployed []KindNamespaceName, store Store) error
 	// Diff what is in cluster but not in deployed.
 	toDelete := subtract(cluster, deployed)
 
-	// Sort so namespaced resources are before non-namespaced resources.
-	sort.Slice(toDelete, func(i, j int) bool {
-		//TODO (Mutating)WebhookConfiguration first
-		// https://github.com/helm/helm/blob/release-2.16/pkg/tiller/kind_sorter.go
-		return toDelete[i].Namespace > toDelete[j].Namespace
-	})
+	// Delete objects in reverse order of creation.
+	reverse(toDelete)
+	// NB. an alternative is to use sortInDeleteOrder(toDelete)
 
 	if x.Log.V(5).Enabled() {
 		mustWriteAPIResourcesCSV(apiResources, "_apiresouces.txt")
@@ -177,7 +173,7 @@ func (x *Execute) Prune(id int, deployed []KindNamespaceName, store Store) error
 	}
 
 	// Delete
-	for i, r := range toDelete {
+	for _, r := range toDelete {
 		rn, err := resource(r.GVK, apiResources)
 		if err != nil {
 			return err
@@ -186,11 +182,12 @@ func (x *Execute) Prune(id int, deployed []KindNamespaceName, store Store) error
 		if r.Namespace != "" {
 			args = append(args, "-n", r.Namespace)
 		}
+		idmin++
 		if x.NoDelete || x.DryRun {
-			x.log("prune", id, idmin+i, "", "skipped "+strings.Join(args, " "))
+			x.log("prune", id, idmin, "", "skipped "+strings.Join(args, " "))
 			continue
 		}
-		x.log("prune", id, idmin+i, "", strings.Join(args, " "))
+		x.log("prune", id, idmin, "", strings.Join(args, " "))
 		_, _, err = x.Kubectl.Run(nil, "", args...)
 		if err != nil {
 			return fmt.Errorf("delete: %w", err)

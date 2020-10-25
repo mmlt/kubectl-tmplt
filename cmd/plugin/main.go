@@ -30,7 +30,7 @@ generate-with-actions - generates templates and actions and writes them to stdou
 		`Dry-run prevents any change being made to the target cluster`)
 	var noDelete bool
 	flag.BoolVar(&noDelete, "no-delete", false,
-		`No-delete prevents prune from deleting resources in target cluster`)
+		`No-delete prevents prune from deleting objects in target cluster`)
 
 	var jobFile string
 	flag.StringVar(&jobFile, "job-file", "",
@@ -212,11 +212,11 @@ Caveats:
 - The job file is parsed before expansion therefore {{ }} need to be wrapped in double quotes to have (arguably) valid yaml.
 - There is currently no easy way to see the content of the job file after expansion.
 
-Prune (optional) makes %[1]s to 1) add labels to all objects and 2) delete cluster resources that are no longer in the
+Prune (optional) makes %[1]s to 1) add labels to all objects and 2) delete cluster objects that are no longer in the
 list of deployed objects. The list of deployed objects is stored as a ConfigMap with store.namespace/name in the target cluster.
 Extra fields can be stored by putting them below 'x', in the example a 'time' field is added with the time of deployment.
 Note:
-- Each Job file must use an unique store.namespace/name (otherwise they prune each others resources)
+- Each Job file must use an unique store.namespace/name (otherwise they prune each others objects)
 - Labeling causes fields in yaml output to be sorted, comments to be removed, single quotes become double quotes.
 
 
