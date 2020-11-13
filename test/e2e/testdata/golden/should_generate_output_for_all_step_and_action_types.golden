@@ -156,10 +156,9 @@ spec:
       labels:
         app.kubernetes.io/name: bank-vaults
     spec:
-      initContainers:
       containers:
         - name: operator
-          image: banzaicloud/vault-operator:1.2.0
+          image: docker.io/banzaicloud/vault-operator:1.3.3
           imagePullPolicy: IfNotPresent
           command:
             - vault-operator
@@ -308,7 +307,9 @@ subjects:
   namespace: kt-test
 
 ---
-##04.02: InstrApply [apply -f -] vault-cr.yaml
+##04.01: InstrApply [apply -f -] vault-cr.yaml
+# Create Vault instance.
+
 apiVersion: "vault.banzaicloud.com/v1alpha1"
 kind: "Vault"
 metadata:
@@ -318,8 +319,9 @@ metadata:
     saxo.com/gitops: kt-test
 spec:
   size: 1
-  image: vault:1.3.1 
-  bankVaultsImage: banzaicloud/bank-vaults:1.2.0
+  image: docker.io/vault:1.3.6
+  bankVaultsImage: docker.io/banzaicloud/bank-vaults:1.3.3
+  statsdImage: docker.io/prom/statsd-exporter:v0.18.0
 
   # Common annotations for all created resources
   annotations:
@@ -449,7 +451,11 @@ spec:
       rules: path "secret/data/ns/default/*" {
           capabilities = ["create", "read", "update", "delete", "list"]
         }
-        
+    - name: allow_pkixyz
+      rules: path "pkixyz/*" {
+          capabilities = ["create", "read", "update", "delete", "list"]
+        }
+
     auth:
     - type: kubernetes
       roles:
@@ -459,11 +465,35 @@ spec:
         policies: allow_secrets
         ttl: 1h
     secrets:
-    - path: secret
-      type: kv
+    - type: kv
+      path: secret
       description: General secrets.
       options:
         version: 2
+    # The PKI secrets engine generates X.509 certificates
+    # See https://www.vaultproject.io/docs/secrets/pki/index.html for more information
+    - type: pki
+      path: pkixyz
+      description: Vault PKI Backend
+      config:
+        default_lease_ttl: 168h
+        max_lease_ttl: 720h
+      configuration:
+        config:
+        - name: urls
+          issuing_certificates: https://vault.vault.kt-test:8200/v1/pkixyz/ca
+          crl_distribution_points: https://vault.vault.kt-test:8200/v1/pkixyz/crl
+        roles:
+        - name: default
+          allowed_domains: pod,svc,default
+          allow_subdomains: true
+          generate_lease: true
+        - name: foobarer
+          allowed_domains: foobar
+          allow_subdomains: true
+          generate_lease: true
+          server_flag: false
+          ttl: 30m
 
     # Allows writing some secrets to Vault (useful for development purposes).
     # See https://www.vaultproject.io/docs/secrets/kv/index.html for more information.
@@ -483,14 +513,14 @@ spec:
     value: "/vault/file"
 
 ---
-##04.03: InstrApply [apply -f -] vault-cr.yaml
+##04.02: InstrApply [apply -f -] vault-cr.yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: vault-file
-  namespace: kt-test
+  namespace: "kt-test"
   labels:
-    saxo.com/gitops: kt-test
+    saxo.com/gitops: "kt-test"
 spec:
   # https://kubernetes.io/docs/concepts/storage/persistent-volumes/#class-1
   # storageClassName: ""
@@ -530,24 +560,28 @@ spec:
 # tlsSkipVerify: "true"
 # token: illegal base64 data at input byte 0
 # config:
-#   #  policies:
-#   #  - name:
-#   #    rules:
-#   kv:
+#   kv: # deprecated, only here for backwards compatibility test
 #   - type: kv
 #     path: secret/data/kubectltmplt/test
 #     data:
 #       data:
 #         USER: superman
 #         PW: supersecret
-#   - type: kv
-#     path: secret/data/kubectltmplt/txt
+#   logicals:
+#   - path: secret/data/kubectltmplt/txt
 #     data:
 #       data:
 #         NAME: <not found: secret-txt>
-#   - type: kv
-#     path: secret/data/kubectltmplt/json
+#   - path: secret/data/kubectltmplt/json
 #     data:
 #       data:
 #         USER: <not found: secret-json>
 #         PW: <not found: secret-json>
+#   - path: pkixyz/config/ca
+#     data:
+#       pem_bundle: "\u003cnot found: xyz-cert\u003e\u003cnot found: xyz-cert\u003e"
+#   policies:
+#   - name: pkixyz_issue
+#     rule: path "pkixyz/issue/*" {
+#         capabilities = ["create", "update"]
+#       }
