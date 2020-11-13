@@ -5,7 +5,7 @@ kind: Pod
 metadata:
   labels:
     app: example
-    gitops.example.com/repo: testdata-00
+    gitops.example.com/repo: testdata-00-simple
   name: test
   namespace: default
 spec:

@@ -70,8 +70,13 @@ More examples in `test/e2e/testdata/` and `kubectl tmplt --help`
 
 
 ## Wishlist
-- Support templates with other delimiters than {{ }}. Use-case; prometheus config uses {{ }} but needs to be templated as well. 
-- [could have] 'delete' step. Use-case: delete CR and wait for operator to do it's work, then delete(prune?) operator. 
+- Support templates with other delimiters than {{ }}. Use-case; prometheus config uses {{ }} but needs to be templated as well.
+  Possible delimters: <% %> {~ ~} (or configurable via tmplt step parameter)
+- [could have] 'delete' step. Use-case: delete CR and wait for operator to do it's work, then delete(prune?) operator.
+- Support annotation deploy.mmlt.nl/create=delete|recreate to specify how immutable objects should be handled.
+  For each object with this annotation kubectl-tmplt will get the object from the cluster and if `.spec` differs will
+  either deletes/create the object or recreate the object.
+  If the object has no annotation or `.spec` are equal kubectl-tmplt will apply the object.   
 
 
 ## Known issues

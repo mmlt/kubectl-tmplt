@@ -57,6 +57,7 @@ func TestGenerate(t *testing.T) {
 		{
 			it: "should_generate_output_for_the_example_template",
 			subject: tool.Tool{
+				Mode:          tool.ModeGenerate,
 				Environ:       []string{},
 				JobFilepath:   "testdata/00/simple-job.yaml",
 				ValueFilepath: "testdata/00/values.yaml",
@@ -74,6 +75,7 @@ func TestGenerate(t *testing.T) {
 		{
 			it: "should_generate_output_for_simple_cluster_config",
 			subject: tool.Tool{
+				Mode:          tool.ModeGenerate,
 				Environ:       []string{},
 				JobFilepath:   "testdata/01/cluster/example-job.yaml",
 				ValueFilepath: "testdata/01/cluster/values.yaml",
@@ -90,8 +92,8 @@ func TestGenerate(t *testing.T) {
 		{
 			it: "should_generate_output_for_all_step_and_action_types",
 			subject: tool.Tool{
-				Environ:       []string{},
 				Mode:          tool.ModeGenerateWithActions,
+				Environ:       []string{},
 				JobFilepath:   "testdata/03/job.yaml",
 				ValueFilepath: "testdata/03/values.yaml",
 				Execute: &execute.Execute{
@@ -107,6 +109,7 @@ func TestGenerate(t *testing.T) {
 		{
 			it: "should_generate_output_with_filevault_secret",
 			subject: tool.Tool{
+				Mode:        tool.ModeGenerate,
 				Environ:     []string{},
 				JobFilepath: "testdata/00/vault-job.yaml",
 				VaultPath:   "testdata/filevault",
@@ -123,6 +126,7 @@ func TestGenerate(t *testing.T) {
 		{
 			it: "should_generate_output_with_keyvault_secret",
 			subject: tool.Tool{
+				Mode:        tool.ModeGenerate,
 				Environ:     []string{},
 				JobFilepath: "testdata/00/vault-job.yaml",
 				VaultPath:   "testdata/keyvault",
@@ -140,6 +144,7 @@ func TestGenerate(t *testing.T) {
 		{
 			it: "should_expand_variables_in_job",
 			subject: tool.Tool{
+				Mode:          tool.ModeGenerate,
 				Environ:       []string{},
 				JobFilepath:   "testdata/04/job.yaml",
 				ValueFilepath: "testdata/04/values.yaml",

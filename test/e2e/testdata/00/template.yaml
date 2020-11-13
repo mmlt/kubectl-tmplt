@@ -7,6 +7,6 @@ metadata:
     app: example
 spec:
   containers:
-    - args: [sleep, "3600"]
-      image: docker.io/ubuntu
-      name: ubuntu
+  - args: [sleep, "3600"]
+    image: docker.io/ubuntu
+    name: ubuntu
