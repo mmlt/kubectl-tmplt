@@ -165,7 +165,7 @@ func (f *setValuesFlag) String() string {
 }
 
 func (f *setValuesFlag) Set(s string) error {
-	kv := strings.Split(s, "=")
+	kv := strings.SplitN(s, "=", 2)
 	if len(kv) != 2 {
 		return fmt.Errorf("expected key=value")
 	}
