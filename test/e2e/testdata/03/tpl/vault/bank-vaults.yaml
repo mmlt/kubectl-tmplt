@@ -7,7 +7,7 @@ kind: CustomResourceDefinition
 metadata:
   name: vaults.vault.banzaicloud.com
   labels:
-    saxo.com/gitops: {{ .Values.gitops }}
+    example.com/gitops: {{ .Values.gitops }}
 spec:
   group: vault.banzaicloud.com
   names:
@@ -25,7 +25,7 @@ metadata:
   name: bank-vaults
   namespace: {{ .Values.namespace }}
   labels:
-    saxo.com/gitops: {{ .Values.gitops }}
+    example.com/gitops: {{ .Values.gitops }}
     
 ---
 
@@ -34,7 +34,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: bank-vaults
   labels:
-    saxo.com/gitops: {{ .Values.gitops }}
+    example.com/gitops: {{ .Values.gitops }}
 rules:
 - apiGroups:
   - vault.banzaicloud.com
@@ -115,7 +115,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: bank-vaults
   labels:
-    saxo.com/gitops: {{ .Values.gitops }}
+    example.com/gitops: {{ .Values.gitops }}
 subjects:
 - kind: ServiceAccount
   name: bank-vaults
@@ -132,7 +132,7 @@ metadata:
   name: bank-vaults
   namespace: {{ .Values.namespace }}
   labels:
-    saxo.com/gitops: {{ .Values.gitops }}
+    example.com/gitops: {{ .Values.gitops }}
 spec:
   strategy:
     type: Recreate
@@ -199,7 +199,7 @@ metadata:
   name: bank-vaults
   namespace: {{ .Values.namespace }}
   labels:
-    saxo.com/gitops: {{ .Values.gitops }}
+    example.com/gitops: {{ .Values.gitops }}
 spec:
   type: ClusterIP
   ports:

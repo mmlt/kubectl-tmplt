@@ -1,6 +1,7 @@
 .PHONY: all install-tools generate test bin check
 
-VERSION?=v0.4.1
+# Version (overridden during CD with repo semver tag)
+VERSION ?= latest
 
 # CI/CD target.
 all: install-tools generate bin

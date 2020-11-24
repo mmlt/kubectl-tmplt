@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-logr/logr"
+	"github.com/hashicorp/go-multierror"
 	"github.com/mitchellh/mapstructure"
 	"github.com/mmlt/kubectl-tmplt/pkg/azure"
 	"github.com/mmlt/kubectl-tmplt/pkg/execute"
@@ -81,8 +82,10 @@ type Executor interface {
 	Action(id int, name string, doc []byte, portForward string, passedValues *yamlx.Values) error
 }
 
-// Getter allows reading object fields in templates.
+// Getter allows reading object fields from master key vault.
 type getter interface {
+	// Error returns the error(s) that have occurred since creation or nil if all went well.
+	Error() error
 	// Get returns the value of an object field.
 	// An object is identified by key.
 	// For composite objects field selects the value, for non-composites field should be empty or "."
@@ -120,7 +123,10 @@ func (t *Tool) Run(values yamlx.Values) error {
 	}
 	t.vault = v
 
-	// TODO check if vault is accessible (if --mkv is specified)
+	// check if vault is accessible.
+	if x := v.Get(pingCheckKey, ""); x != pingCheckValue {
+		return fmt.Errorf("keyvault ping-check expected %s, got: %s", pingCheckValue, x)
+	}
 
 	// get global values.
 	gb := []byte{}
@@ -137,7 +143,14 @@ func (t *Tool) Run(values yamlx.Values) error {
 		return fmt.Errorf("job file: %w", err)
 	}
 
-	return t.run(values, gb, jb)
+	// run
+	err = t.run(values, gb, jb)
+	if err != nil {
+		return err
+	}
+
+	// return vault access errors if any.
+	return v.Error()
 }
 
 // Run performs all steps in the job.
@@ -334,7 +347,9 @@ func (t *Tool) tmpltFunctions() template.FuncMap {
 // If no configPath is specified an empty vault is returned.
 func newVault(configPath string) (getter, error) {
 	if configPath == "" {
-		return fileGet{}, nil
+		return &fileGet{
+			value: map[string]string{pingCheckKey: pingCheckValue},
+		}, nil
 	}
 
 	// read vault config directory.
@@ -367,21 +382,36 @@ func newVault(configPath string) (getter, error) {
 		}
 		return g, nil
 	case "file":
-		return fileGet(m), nil
+		return &fileGet{value: m}, nil
 	default:
 		return nil, fmt.Errorf("vault config %s must be one of [azure-key-vault,file], got: %s", filepath.Join(configPath, "type"), t)
 	}
 }
 
+// PingCheck key/value are used to check key vault access.
+const (
+	pingCheckKey   = "ping-check"
+	pingCheckValue = "pong"
+)
+
 // FileGet allows reading secrets.
-type fileGet map[string]string
+type fileGet struct {
+	value map[string]string
+	err   error
+}
+
+// Error returns the error(s) that have occurred since creation or nil if all went well.
+func (fg *fileGet) Error() error {
+	return fg.err
+}
 
 // Get value addressed by key from files.
 // If field is empty return the value as-is.
 // Otherwise expect the value to be a JSON object and field a field of the object.
-func (fg fileGet) Get(key, field string) string {
-	v, ok := fg[key]
+func (fg *fileGet) Get(key, field string) string {
+	v, ok := fg.value[key]
 	if !ok {
+		fg.err = multierror.Append(fg.err, fmt.Errorf("not found: %s", key))
 		return fmt.Sprintf("<not found: %s>", key)
 	}
 
@@ -393,14 +423,16 @@ func (fg fileGet) Get(key, field string) string {
 	m := map[string]string{}
 	err := json.Unmarshal([]byte(v), &m)
 	if err != nil {
+		fg.err = multierror.Append(fg.err, err)
 		return fmt.Sprintf("<%v>", err)
 	}
 
 	v, ok = m[field]
 	if !ok {
+		fg.err = multierror.Append(fg.err, fmt.Errorf("not found: %s", field))
 		return fmt.Sprintf("<not found: %s>", field)
 	}
 	return v
 }
 
-var _ getter = fileGet{}
+var _ getter = &fileGet{}

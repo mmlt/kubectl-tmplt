@@ -3,7 +3,9 @@ package e2e_test
 
 import (
 	"bytes"
+	"errors"
 	"flag"
+	"github.com/hashicorp/go-multierror"
 	"github.com/mmlt/kubectl-tmplt/pkg/execute"
 	"github.com/mmlt/kubectl-tmplt/pkg/tool"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/yamlx"
@@ -51,6 +53,8 @@ func TestGenerate(t *testing.T) {
 		setValues yamlx.Values
 		// subject is what is tested.
 		subject tool.Tool
+		// err is the expected error
+		err error
 		// resources is a comma separated list of the required external resources to run a test
 		resources string
 	}{
@@ -79,23 +83,6 @@ func TestGenerate(t *testing.T) {
 				Environ:       []string{},
 				JobFilepath:   "testdata/01/cluster/example-job.yaml",
 				ValueFilepath: "testdata/01/cluster/values.yaml",
-				Execute: &execute.Execute{
-					Kubectl: execute.Kubectl{
-						Log: log,
-					},
-					Out: &got,
-					Log: log,
-				},
-				Log: log,
-			},
-		},
-		{
-			it: "should_generate_output_for_all_step_and_action_types",
-			subject: tool.Tool{
-				Mode:          tool.ModeGenerateWithActions,
-				Environ:       []string{},
-				JobFilepath:   "testdata/03/job.yaml",
-				ValueFilepath: "testdata/03/values.yaml",
 				Execute: &execute.Execute{
 					Kubectl: execute.Kubectl{
 						Log: log,
@@ -142,6 +129,45 @@ func TestGenerate(t *testing.T) {
 			resources: resourceKeyVault,
 		},
 		{
+			it: "should_generate_errors_when_secret_or_secret_field_are_missing",
+			subject: tool.Tool{
+				Mode:        tool.ModeGenerate,
+				Environ:     []string{},
+				JobFilepath: "testdata/00/vault-error-job.yaml",
+				VaultPath:   "testdata/filevault",
+				Execute: &execute.Execute{
+					Kubectl: execute.Kubectl{
+						Log: log,
+					},
+					Out: &got,
+					Log: log,
+				},
+				Log: log,
+			},
+			err: multierror.Append(
+				errors.New("not found: missing-secret"),
+				errors.New("not found: missing"),
+			),
+		},
+		{
+			it: "should_generate_output_for_all_step_and_action_types",
+			subject: tool.Tool{
+				Mode:          tool.ModeGenerateWithActions,
+				Environ:       []string{},
+				JobFilepath:   "testdata/03/job.yaml",
+				ValueFilepath: "testdata/03/values.yaml",
+				VaultPath:     "testdata/filevault",
+				Execute: &execute.Execute{
+					Kubectl: execute.Kubectl{
+						Log: log,
+					},
+					Out: &got,
+					Log: log,
+				},
+				Log: log,
+			},
+		},
+		{
 			it: "should_expand_variables_in_job",
 			subject: tool.Tool{
 				Mode:          tool.ModeGenerate,
@@ -170,6 +196,12 @@ func TestGenerate(t *testing.T) {
 			got.Reset()
 
 			err := tst.subject.Run(tst.setValues)
+			if tst.err != nil {
+				if assert.Error(t, err) {
+					assert.Equal(t, tst.err, err, "expect error")
+				}
+				return
+			}
 			if assert.NoError(t, err) {
 				// read golden file to compare got output with
 				p := filepath.Join("testdata/golden", tst.it)

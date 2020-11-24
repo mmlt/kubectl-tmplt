@@ -1,0 +1,7 @@
+steps:
+  - tmplt: "vault-error-template.yaml"
+    values:
+      name: "test"
+
+defaults:
+  namespace: "default"

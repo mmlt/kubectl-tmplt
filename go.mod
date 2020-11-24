@@ -13,6 +13,7 @@ require (
 	github.com/go-logr/logr v0.2.1
 	github.com/go-logr/stdr v0.0.0-20190808155957-db4f46c40425
 	github.com/google/uuid v1.1.2 // indirect
+	github.com/hashicorp/go-multierror v1.0.0
 	github.com/hashicorp/vault/api v1.0.4
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect

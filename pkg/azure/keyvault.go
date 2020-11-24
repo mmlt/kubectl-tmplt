@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/go-autorest/autorest"
+	"github.com/hashicorp/go-multierror"
 	"github.com/mmlt/kubectl-tmplt/pkg/util/backoff"
 	"time"
 
@@ -57,6 +58,7 @@ func NewKeyVault(values map[string]string) (*KV, error) {
 type KV struct {
 	client keyvault.BaseClient
 	url    string
+	err    error
 }
 
 // GetAuthorizerFrom returns an authorizer from VAULT_* key-value pairs.
@@ -73,10 +75,15 @@ func getAuthorizerFrom(values map[string]string) (autorest.Authorizer, error) {
 	return a, nil
 }
 
+// Error returns the error(s) that have occurred since creation or nil if all went well.
+func (k *KV) Error() error {
+	return k.err
+}
+
 // Get value addressed by key from vault.
 // If field is empty return the value as-is.
 // Otherwise expect the value to be a JSON object and field a field of the object.
-func (k KV) Get(key, field string) string {
+func (k *KV) Get(key, field string) string {
 	s, err := k.get(key)
 	if err != nil {
 		return err.Error()
@@ -100,7 +107,7 @@ func (k KV) Get(key, field string) string {
 }
 
 // Get gets a KeyVault secret by name.
-func (k KV) get(name string) (string, error) {
+func (k *KV) get(name string) (string, error) {
 	var err error
 	for exp := backoff.NewExponential(10 * time.Second); exp.Retries() < 10; exp.Sleep() {
 		r, e := k.client.GetSecret(context.Background(), k.url, name, "")
@@ -109,6 +116,7 @@ func (k KV) get(name string) (string, error) {
 		}
 		err = e
 	}
+	k.err = multierror.Append(k.err, err)
 	return "", fmt.Errorf("no secret %s: %w", name, err)
 }
 

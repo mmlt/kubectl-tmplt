@@ -254,6 +254,10 @@ type fakeVault map[string]string
 
 var _ getter = fakeVault{}
 
+func (m fakeVault) Error() error {
+	return nil
+}
+
 func (m fakeVault) Get(key, field string) string {
 	p := path.Join(key, field)
 	return m[p]

@@ -6,7 +6,7 @@ metadata:
   name: "vault"
   namespace: {{ .Values.namespace }}
   labels:
-    saxo.com/gitops: {{ .Values.gitops }}
+    example.com/gitops: {{ .Values.gitops }}
 spec:
   size: 1
   image: docker.io/vault:1.3.6
@@ -209,7 +209,7 @@ metadata:
   name: vault-file
   namespace: "{{ .Values.namespace }}"
   labels:
-    saxo.com/gitops: "{{ .Values.gitops }}"
+    example.com/gitops: "{{ .Values.gitops }}"
 spec:
   # https://kubernetes.io/docs/concepts/storage/persistent-volumes/#class-1
   # storageClassName: ""
