@@ -15,10 +15,10 @@ func IsEmpty(yaml []byte) bool {
 }
 
 // SplitDoc splits a yaml text at "---" boundaries.
-// A doc is limited to 512KB.
+// A doc is limited to 5MB.
 func SplitDoc(yaml []byte) ([][]byte, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(yaml))
-	scanner.Buffer(make([]byte, 64*1024), 512*1024)
+	scanner.Buffer(make([]byte, 128*1024), 5*1024*1024)
 	scanner.Split(splitYAMLDocument)
 	var result [][]byte
 	for scanner.Scan() {
