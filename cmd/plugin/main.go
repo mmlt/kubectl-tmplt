@@ -14,8 +14,13 @@ import (
 	"strings"
 )
 
-// Version as set during go build.
-var Version string
+// Set by goreleaser.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
+)
 
 func main() {
 	var mode modeFlag
@@ -56,8 +61,8 @@ generate-with-actions - generates templates and actions and writes them to stdou
 	var verbosity int
 	flag.IntVar(&verbosity, "v", 0,
 		`Log verbosity, higher numbers produce more output`)
-	var version bool
-	flag.BoolVar(&version, "version", false,
+	var versionFlag bool
+	flag.BoolVar(&versionFlag, "version", false,
 		"Print version")
 	var hlp bool
 	flag.BoolVar(&hlp, "help", false,
@@ -66,12 +71,12 @@ generate-with-actions - generates templates and actions and writes them to stdou
 	flag.Parse()
 
 	if hlp {
-		fmt.Fprintf(os.Stderr, help, filepath.Base(os.Args[0]), Version)
+		fmt.Fprintf(os.Stderr, help, filepath.Base(os.Args[0]), version, date)
 		os.Exit(0)
 	}
 
-	if version {
-		fmt.Println(filepath.Base(os.Args[0]), Version)
+	if versionFlag {
+		fmt.Println(filepath.Base(os.Args[0]), version, date)
 		os.Exit(0)
 	}
 
@@ -178,7 +183,7 @@ func (f *setValuesFlag) Set(s string) error {
 }
 
 // Help text
-// text argument: %[1]=program name, %[2]=program version.
+// text argument: %[1]=program name, %[2]=program version, %[3]=build date.
 const help = `%[1]s reads a job file and performs the steps. 
 
 %[1]s can operate in 'generate' or 'apply' mode.

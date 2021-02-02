@@ -2,5 +2,6 @@ _*/
 _*
 .idea/
 bin/
+dist/
 *.iml
 *.cover
