@@ -29,9 +29,9 @@ teste2e: check
 
 # Snapshot binary.
 snapshot: check
-	goreleaser --snapshot --skip-publish
+	goreleaser build --snapshot --single-target --rm-dist
 
 # Install binary in PATH.
 install-linux:
 	sudo cp dist/kubectl-tmplt_linux_amd64/kubectl-tmplt /usr/local/bin/
-	sudo ln -sfr /usr/local/bin/kubectl-tmplt-$(VERSION)-linux-amd64 /usr/local/bin/kubectl-tmplt
+	#sudo ln -sfr /usr/local/bin/kubectl-tmplt-$(VERSION)-linux-amd64 /usr/local/bin/kubectl-tmplt

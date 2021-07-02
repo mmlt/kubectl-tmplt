@@ -59,16 +59,29 @@ func textToAPIResources(txt string) ([]metav1.APIResource, error) {
 	iter := t.RowIter()
 	var result []metav1.APIResource
 	for iter.Next() {
+		var ok bool
 		ar := metav1.APIResource{}
 		//TODO handle ok from GetColByName
 		s, _ := iter.GetColByName("NAME")
 		ar.Name = s
-		s, _ = iter.GetColByName("APIGROUP")
-		ar.Group = s
 		s, _ = iter.GetColByName("NAMESPACED")
 		ar.Namespaced = (s == "true")
 		s, _ = iter.GetColByName("KIND")
 		ar.Kind = s
+
+		// APIVERSION contains "v1" or "apps/v1", APIGROUP contains "apps"
+		if s, ok = iter.GetColByName("APIVERSION"); ok {
+			gv := strings.Split(s, "/")
+			if len(gv) == 1 {
+				ar.Version = s
+			} else {
+				ar.Group = gv[0]
+				ar.Version = gv[1]
+			}
+		} else if s, ok = iter.GetColByName("APIGROUP"); ok {
+			ar.Group = s
+		}
+
 		result = append(result, ar)
 	}
 	return result, nil
