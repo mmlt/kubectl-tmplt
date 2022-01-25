@@ -1,7 +1,7 @@
 type: setVault
 url: https://localhost:8200
 tlsSkipVerify: "true"
-token: {{ indexOrDefault "<no value>" .Get "secret" .Values.namespace "vault-unseal-keys" "data" "vault-root" | b64dec }}
+token: {{ index .Get "secret" .Values.namespace "vault-unseal-keys" "data" "vault-root" | b64dec }}
 config:
   kv: # deprecated, only here for backwards compatibility test
   - type: kv

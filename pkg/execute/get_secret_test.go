@@ -10,10 +10,11 @@ import (
 
 func TestExecute_getSecret(t *testing.T) {
 	tests := []struct {
-		it   string
-		doc  string
-		fake fakeKubectl
-		want yamlx.Values
+		it      string
+		doc     string
+		fake    fakeKubectl
+		want    yamlx.Values
+		wantErr error
 	}{
 		{
 			it: "should_get_a_secret_and_parse_output",
@@ -60,6 +61,18 @@ postCondition: gt (len (index .data "een")) 10
 				},
 			},
 		},
+		{
+			it: "should_get_a_secret_and_report_failed_postcondition", // SLOW TEST
+			doc: `type: getSecret
+namespace: default
+name: test
+postCondition: gt (len (index .data "een")) 999
+`,
+			fake: fakeKubectl{
+				stdout: testSecret("default", "test"),
+			},
+			wantErr: fmt.Errorf("timeout waiting for postCondition: gt (len (index .data \"een\")) 999"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.it, func(t *testing.T) {
@@ -68,8 +81,12 @@ postCondition: gt (len (index .data "een")) 10
 			}
 			passedValues := &yamlx.Values{}
 			err := x.getSecret(0, "name", []byte(tt.doc), "", passedValues)
-			if assert.NoError(t, err) {
-				assert.Equal(t, tt.want, *passedValues)
+			if tt.wantErr != nil {
+				assert.Equal(t, tt.wantErr, err)
+			} else {
+				if assert.NoError(t, err) {
+					assert.Equal(t, tt.want, *passedValues)
+				}
 			}
 		})
 	}
